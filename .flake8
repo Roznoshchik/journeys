@@ -1,0 +1,7 @@
+[flake8]
+exclude = .git,__pycache__,.github,.aws-sam,.vscode,aws-dist,frontend,.pytest_cache,venv,./app/ReadabiliPy,./migrations
+ignore = E501
+max-line-length = 88
+extend-ignore = E203, W503
+per-file-ignores =
+    tests/*: E402
