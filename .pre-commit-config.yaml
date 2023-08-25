@@ -1,0 +1,48 @@
+repos:
+-   repo: https://github.com/psf/black
+    rev: 23.7.0
+    hooks:
+      - id: black
+        # It is recommended to specify the latest version of Python
+        # supported by your project here, or alternatively use
+        # pre-commit's default_language_version, see
+        # https://pre-commit.com/#top_level-default_language_version
+        language_version: python3.11
+
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0  # Adjust this to the latest version.
+    hooks:
+    -   id: trailing-whitespace
+    -   id: end-of-file-fixer
+
+-   repo: https://github.com/pycqa/flake8
+    rev: 6.1.0
+    hooks:
+    -   id: flake8
+        name: Flake8 (strict)
+        args: ['--count', '--select=E9,F63,F7,F82', '--show-source', '--statistics', 'functions/']
+        language: python
+        types: [python]
+    -   id: flake8
+        name: Flake8 (warnings)
+        args: ['--exit-zero', 'functions/']
+        verbose: true
+        language: python
+        types: [python]
+
+
+-   repo: https://github.com/PyCQA/bandit
+    rev: 1.7.5
+    hooks:
+    -   id: bandit
+        args: ['-r', 'functions']
+        files: ^functions/
+
+-   repo: local
+    hooks:
+    -   id: pytest
+        name: pytest
+        entry: pytest
+        language: system
+        pass_filenames: false
+        types: [python]
