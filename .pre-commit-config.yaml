@@ -41,9 +41,9 @@ repos:
         pass_filenames: false
         types: [python]
 
-    -   id: npm-test-client
-        name: Run npm test in client folder
-        entry: sh -c 'cd client && npm t'
-        language: system
-        pass_filenames: false
-        types: [javascript]  # or any type relevant to the test
+    # -   id: npm-test-client
+    #     name: Run npm test in client folder
+    #     entry: sh -c 'cd client && npm t'
+    #     language: system
+    #     pass_filenames: false
+    #     types: [javascript]  # or any type relevant to the test

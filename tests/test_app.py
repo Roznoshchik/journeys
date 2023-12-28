@@ -1,5 +1,5 @@
 import unittest
-from ..app import app
+from app import app
 from http import HTTPStatus
 
 
