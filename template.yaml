@@ -1,0 +1,47 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  journeys
+Globals:
+  Function:
+    Runtime: python3.11
+    Timeout: 30
+    Architectures:
+      - x86_64
+Parameters:
+  MapboxApiKey:
+    Type: String
+
+Resources:
+  JourneysApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: prod
+      OpenApiVersion: 3.0.3
+      Name: JourneysApi
+      BinaryMediaTypes:
+        - image/*
+        - audio/*
+
+  FlaskApi:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: functions
+      Handler: app.app.app
+      MemorySize: 256
+      Environment:
+        Variables:
+          MAPBOX_API_KEY: !Ref MapboxApiKey
+      Events:
+        RootRoute:
+          Type: Api
+          Properties:
+            RestApiId: !Ref JourneysApi
+            Path: /
+            Method: any
+        CatchAllRoutes:
+          Type: Api
+          Properties:
+            RestApiId: !Ref JourneysApi
+            Path: /{resource+}
+            Method: any
