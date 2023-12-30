@@ -1,8 +1,9 @@
-from flask import Flask, render_template
+from flask import render_template
+from .utils.flasklambda import FlaskLambda
 from http import HTTPStatus
 
 
-app = Flask(__name__, static_folder="../client/build")
+app = FlaskLambda(__name__)
 
 
 @app.route("/")
