@@ -3,6 +3,7 @@
 <style>
     html {
         height: 100%;
+
         * {
             box-sizing: border-box;
         }
@@ -24,12 +25,14 @@
         flex-grow: 1;
 
     }
+
     .sidebar {
         width: 450px;
     }
 
     .locations {
-        max-height: 80vh; /* This is very wip will have better solution */
+        max-height: 80vh;
+        /* This is very wip will have better solution */
         overflow-x: scroll;
 
     }
@@ -54,22 +57,7 @@
 {% endblock %}
 {% block body %}
 <div class="sidebar">
-    <div class="locations">
-        <div class="location">
-            <div class="form-item">
-                <label for="address">Address</label>
-                <input type="search" name="address">
-            </div>
-            <div class="form-item">
-                <label for="date-arrived">Date Arrived</label>
-                <input type="date" name="date-arrived">
-            </div>
-            <div class="form-item">
-                <label for="date-left">Date Left</label>
-                <input type="date" name="date-left">
-            </div>
-        </div>
-    </div>
+    <div class="locations"></div>
     <div class="actions">
         <button class="add">Add another location</button>
         <button class="submit">Submit</button>
@@ -85,6 +73,9 @@
     const add = document.querySelector('.add');
     const submit = document.querySelector('.submit');
     const main = document.querySelector('.main');
+    let addressTimeoutId = null;
+
+    addLocation()  // we aren't rendering this to start, so initialize with first input.
 
     submit.onclick = () => {
         const results = []
@@ -98,12 +89,15 @@
         main.innerText = JSON.stringify(results, null, 4);
     }
 
-    add.onclick = () => {
+    add.onclick = addLocation;
+
+    function addLocation() {
         const location = document.createElement('div');
         location.classList.add('location');
         location.innerHTML = `<div class="form-item">
             <label for="address">Address</label>
-            <input type="search" name="address">
+            <input type="search" autocomplete="off" name="address">
+            <div class="suggestions"></div>
         </div>
         <div class="form-item">
             <label for="date-arrived">Date Arrived</label>
@@ -113,7 +107,34 @@
             <label for="date-left">Date Left</label>
             <input type="date" name="date-left">
         </div>`
+        const address = location.querySelector('input[name=address]');
+        const suggestions = location.querySelector('.suggestions')
+        address.oninput = () => handleAddressInput(address, suggestions);
+
         locations.append(location);
+    }
+
+    function handleAddressInput(address, suggestions) {
+        if (address.value.trim()){
+            clearTimeout(addressTimeoutId);
+            addressTimeoutId = setTimeout(()=> getAddressSuggestions(address.value, suggestions), 1000)
+        }
+    }
+
+    async function getAddressSuggestions(address, suggestions) {
+        const res = await fetch('/get-address-suggestions', {
+            method: 'POST',
+            headers: {
+                'content-type': 'application/json'
+            },
+            body: JSON.stringify({address})
+        })
+        if (res.ok) {
+            const data = await res.json()
+            console.log(data)
+        } else {
+            console.log(res)
+        }
     }
 
 </script>
