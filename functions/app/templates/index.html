@@ -115,25 +115,33 @@
     }
 
     function handleAddressInput(address, suggestions) {
-        if (address.value.trim()){
+        if (address.value.trim()) {
             clearTimeout(addressTimeoutId);
-            addressTimeoutId = setTimeout(()=> getAddressSuggestions(address.value, suggestions), 1000)
+            addressTimeoutId = setTimeout(() => getAddressSuggestions(address.value, suggestions), 1000)
         }
     }
 
     async function getAddressSuggestions(address, suggestions) {
-        const res = await fetch('/get-address-suggestions', {
+        const currentUrl = window.location.href;
+        const targetUrl = currentUrl + '/get-address-suggestions'
+        const res = await fetch(targetUrl, {
             method: 'POST',
             headers: {
                 'content-type': 'application/json'
             },
-            body: JSON.stringify({address})
+            body: JSON.stringify({ address })
         })
         if (res.ok) {
             const data = await res.json()
             console.log(data)
         } else {
-            console.log(res)
+            try {
+                const error = await res.json()
+                console.log(error)
+            } catch {
+                console.log(res.text)
+
+            }
         }
     }
 
