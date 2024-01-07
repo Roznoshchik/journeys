@@ -42,6 +42,23 @@ export default defineConfig({
           }
         });
 
+        // Read the copied index.html and update static urls.
+        fs.readFile(templatesDestination, 'utf8', function(err, data) {
+          if (err) {
+            return console.log(err);
+          }
+          // Regular expression to match 'static/**.**'
+          const regex = /static\/(.*?)\.(js|css|jpg|png|gif|svg)/g;
+          // Replace found instances with the Flask url_for syntax
+          const result = data.replace(regex, "{{ url_for('static', filename='$1.$2') }}");
+
+          // Write the result to the same file
+          fs.writeFile(templatesDestination, result, 'utf8', function(err) {
+            if (err) return console.log(err);
+          });
+        });
+
+
         // Delete the index.html in static directory if it exists
         if (fs.existsSync(staticIndexHtml)) {
           fs.unlink(staticIndexHtml, function(err) {
