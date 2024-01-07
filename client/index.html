@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% block styles %}
-<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<link rel="stylesheet" href="static/style.css">
 <style>
     html {
         height: 100%;
@@ -97,5 +97,5 @@
 {% endblock %}
 
 {% block scripts %}
-<script type="module" src="{{ url_for('static', filename='main.js') }}"></script>
+<script type="module" src="static/main.js"></script>
 {% endblock %}
