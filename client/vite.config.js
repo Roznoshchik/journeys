@@ -5,7 +5,7 @@ import path from 'path';
 export default defineConfig({
   build: {
     sourcemap: true, // keep the sourcemaps
-    minify: false, // disable minification
+    minify: true,
     outDir: '../functions/app/static', // set the output directory for static assets
     emptyOutDir: true, // clear the directory before building
     rollupOptions: {

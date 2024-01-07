@@ -1,3 +1,7 @@
+# build files
+functions/app/static/main.js
+functions/app/static/style.css
+
 # osx stuff
 .DS_Store
 
