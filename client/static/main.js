@@ -2,7 +2,8 @@ import './style.css';
 import { Map, View } from 'ol';
 import Feature from 'ol/Feature.js';
 import Point from 'ol/geom/Point.js';
-import {fromLonLat} from 'ol/proj';
+import { LineString } from 'ol/geom';
+import { fromLonLat } from 'ol/proj';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
 
@@ -10,19 +11,19 @@ import TileLayer from 'ol/layer/Tile';
 import OSM from 'ol/source/OSM';
 
 const map = new Map({
-  target: 'map',
-  layers: [
-    new TileLayer({
-      source: new OSM()
+    target: 'map',
+    layers: [
+        new TileLayer({
+            source: new OSM()
+        })
+    ],
+    view: new View({
+        center: [0, 0],
+        zoom: 2
     })
-  ],
-  view: new View({
-    center: [0, 0],
-    zoom: 2
-  })
 });
 
-
+const ANIMATION_DURATION = 3000;
 const locations = document.querySelector('.locations');
 const add = document.querySelector('.add');
 const submit = document.querySelector('.submit');
@@ -32,35 +33,123 @@ let validatedLocations = {};
 
 addLocationInput()  // we aren't rendering this to start, so initialize with first input.
 
+// When the submit button is clicked, this function is executed
 submit.onclick = () => {
-    const results = []
+    // Loop through each '.location' element
     for (let location of locations.querySelectorAll('.location')) {
+        // Retrieve input values from the location element
         const address = location.querySelector('input[name=address]');
         const arrival = location.querySelector('input[name=arrival]');
         const departure = location.querySelector('input[name=departure]');
         const id = address.id;
 
+        // Update the validatedLocations object with the new data
         validatedLocations[id].address = address.value;
         validatedLocations[id].arrival = arrival.value;
         validatedLocations[id].departure = departure.value;
-  };
+    };
+    let allCoordinates = []
+    // Loop through each location in validatedLocations
+    for (const location of Object.values(validatedLocations)) {
+        allCoordinates.push(location.coordinates)
+        // Create a point feature for each location
+        const point = new Point(fromLonLat(location.coordinates));
+        const feature = new Feature({
+            geometry: point
+        });
+        // Create a source and layer for the point feature and add it to the map
+        const vectorSource = new VectorSource({
+            features: [feature]
+        });
+        const vectorLayer = new VectorLayer({
+            source: vectorSource
+        });
 
-  for (const location of Object.values(validatedLocations)) {
-    const point = new Point(fromLonLat(location.coordinates));
-    const feature = new Feature({
-      geometry: point
+        // Add the point layer to the map
+        map.addLayer(vectorLayer);
+    }
+
+
+    // Create a LineString with coordinates from each location
+    const lineString = new LineString(allCoordinates);
+
+    // Transform the coordinates of the LineString to the map's projection
+    lineString.transform('EPSG:4326', 'EPSG:3857');
+
+    // Create an empty LineString to initialize, preventing any flash from delays.
+    const initialLineString = new LineString([lineString.getCoordinates()[0]]);
+
+    // Create a feature for the LineString
+    const lineFeature = new Feature({
+        geometry: initialLineString
     });
-    const vectorSource = new VectorSource({
-      features: [feature]
+    // Create a source and layer for the line feature
+    const lineVectorSource = new VectorSource({
+        features: [lineFeature]
     });
-    const vectorLayer = new VectorLayer({
-      source: vectorSource
+    const lineVectorLayer = new VectorLayer({
+        source: lineVectorSource
     });
 
-    map.addLayer(vectorLayer);
+    // Add the line layer to the map
+    // At this point, the line is created with all the coordinates but not yet visible
+    map.addLayer(lineVectorLayer);
 
-  }
+    animateLine(lineString, lineFeature, allCoordinates)
+}
 
+
+/**
+ * Animates the drawing of a line feature on a map, rendering it segment by segment.
+ *
+ * This function progressively draws a line, which is defined by a LineString object, by animating
+ * each segment for a specified duration. The animation visually represents the line being drawn from
+ * one coordinate to the next, creating a dynamic effect on the map.
+ *
+ * @param {LineString} lineString - The OpenLayers LineString object, which contains the coordinates
+ *                                  through which the line will pass. It is the base geometry for the animation.
+ * @param {Feature} lineFeature - The OpenLayers Feature object representing the line. This feature's geometry
+ *                                will be updated during the animation to reflect the growing line.
+ */
+function animateLine(lineString, lineFeature) {
+    let index = 0;
+    const totalSegments = lineString.getCoordinates().length - 1;
+    const segmentDuration = ANIMATION_DURATION;
+    let segmentStart = null;
+    let startCoords = lineString.getCoordinates()[0]
+    let coordsToRender = [startCoords];
+
+    function _animate(timestamp) {
+        if (index >= totalSegments) {
+            return;  // Animation complete
+        }
+
+        if (!segmentStart) segmentStart = timestamp;
+        const elapsed = timestamp - segmentStart;
+
+        const segmentStartCoords = lineString.getCoordinates()[index];
+        const segmentEndCoords = lineString.getCoordinates()[index + 1];
+        if (elapsed < segmentDuration) {
+
+            const percentComplete = elapsed / segmentDuration;
+            const interpolatedCoord = [
+                segmentStartCoords[0] + (segmentEndCoords[0] - segmentStartCoords[0]) * percentComplete,
+                segmentStartCoords[1] + (segmentEndCoords[1] - segmentStartCoords[1]) * percentComplete,
+            ];
+            // Include all previous segments plus the current interpolated coordinate
+            const currentLineString = new LineString([...coordsToRender, interpolatedCoord]);
+            lineFeature.setGeometry(currentLineString);
+            requestAnimationFrame(_animate);
+        } else {
+            // Segment completed, prepare for the next segment
+            coordsToRender.push(segmentEndCoords);
+            index++;
+            segmentStart = null;
+            requestAnimationFrame(_animate);
+        }
+    }
+
+    requestAnimationFrame(_animate);
 }
 
 add.onclick = addLocationInput;
