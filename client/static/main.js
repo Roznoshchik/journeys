@@ -6,6 +6,7 @@ import { LineString } from 'ol/geom';
 import { fromLonLat } from 'ol/proj';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
+import { Icon, Style } from 'ol/style.js';
 
 import TileLayer from 'ol/layer/Tile';
 import OSM from 'ol/source/OSM';
@@ -57,6 +58,18 @@ submit.onclick = () => {
         const feature = new Feature({
             geometry: point
         });
+
+        const iconStyle = new Style({
+            image: new Icon({
+                anchor: [0.5, 0.5],
+                scale: ".5",
+                anchorXUnits: 'fraction',
+                anchorYUnits: 'fraction',
+                src: 'static/images/rr.png',
+            }),
+        });
+        feature.setStyle(iconStyle)
+
         // Create a source and layer for the point feature and add it to the map
         const vectorSource = new VectorSource({
             features: [feature]
@@ -64,6 +77,7 @@ submit.onclick = () => {
         const vectorLayer = new VectorLayer({
             source: vectorSource
         });
+        vectorLayer.setZIndex(100);
 
         // Add the point layer to the map
         map.addLayer(vectorLayer);
