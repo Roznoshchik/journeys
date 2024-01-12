@@ -5,15 +5,15 @@ import path from 'path';
 export default defineConfig({
   build: {
     sourcemap: true, // keep the sourcemaps
-    minify: true,
-    outDir: '../functions/app/static', // set the output directory for static assets
+    minify: false,
+    outDir: '../functions/app/static/', // set the output directory for static assets
     emptyOutDir: true, // clear the directory before building
     rollupOptions: {
       output: {
         // Set constant file names without hash suffixes
         entryFileNames: 'main.js',
         chunkFileNames: 'main.js',
-        assetFileNames: ({name}) => {
+        assetFileNames: ({ name }) => {
           if (name && name.endsWith('.css')) {
             return 'style.css';
           }
@@ -25,6 +25,22 @@ export default defineConfig({
   },
   plugins: [
     {
+      name: 'handle-images',
+      writeBundle() {
+        const imagesSrc = path.resolve(__dirname, './static/images/');
+        console.log(imagesSrc)
+        const imagesDst = path.resolve(__dirname, '../functions/app/static/images/');
+        console.log(imagesDst)
+
+        fs.cp(imagesSrc, imagesDst, { recursive: true }, (err) => {
+          if (err) {
+            fs.mkdirSync(imagesDst);
+            fs.cpSync(imagesSrc, imagesDst, { recursive: true }, (err) => console.log(err))
+          }
+        });
+      }
+    },
+    {
       name: 'handle-index-html',
       writeBundle() {
         // Define the source of the actual index.html you are working on
@@ -34,8 +50,14 @@ export default defineConfig({
         const staticIndexHtml = path.resolve(__dirname, '../functions/app/static/index.html');
 
         // Copy the original index.html file to the new location
-        fs.copyFile(source, templatesDestination, function(err) {
+        fs.copyFile(source, templatesDestination, function (err) {
           if (err) {
+            fs.mkdirSync(templatesDestinationDir)
+            fs.copyFile(source, templatesDestination, function (err) {
+              if (err) {
+                return console.log(err);
+              }
+            })
             console.error('Error copying original index.html:', err);
           } else {
             console.log(`Original index.html copied to ${templatesDestination}`);
@@ -43,7 +65,7 @@ export default defineConfig({
         });
 
         // Read the copied index.html and update static urls.
-        fs.readFile(templatesDestination, 'utf8', function(err, data) {
+        fs.readFile(templatesDestination, 'utf8', function (err, data) {
           if (err) {
             return console.log(err);
           }
@@ -53,7 +75,7 @@ export default defineConfig({
           const result = data.replace(regex, "{{ url_for('static', filename='$1.$2') }}");
 
           // Write the result to the same file
-          fs.writeFile(templatesDestination, result, 'utf8', function(err) {
+          fs.writeFile(templatesDestination, result, 'utf8', function (err) {
             if (err) return console.log(err);
           });
         });
@@ -61,7 +83,7 @@ export default defineConfig({
 
         // Delete the index.html in static directory if it exists
         if (fs.existsSync(staticIndexHtml)) {
-          fs.unlink(staticIndexHtml, function(err) {
+          fs.unlink(staticIndexHtml, function (err) {
             if (err) {
               console.error('Error deleting static index.html:', err);
             } else {
