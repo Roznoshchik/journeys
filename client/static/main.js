@@ -7,7 +7,7 @@ import { fromLonLat } from 'ol/proj';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
 import { Icon, Style } from 'ol/style.js';
-
+import { StadiaMaps } from 'ol/source';
 import TileLayer from 'ol/layer/Tile';
 import OSM from 'ol/source/OSM';
 
@@ -15,7 +15,12 @@ const map = new Map({
     target: 'map',
     layers: [
         new TileLayer({
-            source: new OSM()
+
+            source: new StadiaMaps({
+                // See our gallery for more styles: https://docs.stadiamaps.com/themes/
+                layer: 'osm_bright',
+                retina: true,  // Set to false for stamen_watercolor
+            })
         })
     ],
     view: new View({
@@ -33,6 +38,27 @@ let addressTimeoutId = null;
 let validatedLocations = {};
 
 addLocationInput()  // we aren't rendering this to start, so initialize with first input.
+
+// Function to update the map source
+function updateMapSource(layer) {
+    const sourceOptions = {
+        stamen_toner: { layer: 'stamen_toner', retina: true },
+        stamen_watercolor: { layer: 'stamen_watercolor', retina: false },
+        stamen_terrain: { layer: 'stamen_terrain', retina: false },
+        alidade_smooth_dark: { layer: 'alidade_smooth_dark', retina: true },
+        outdoors: { layer: 'outdoors', retina: true },
+        osm_bright: { layer: 'osm_bright', retina: true },
+        // Add more sources as needed
+    };
+
+    const newSource = new StadiaMaps(sourceOptions[layer]);
+    map.getLayers().item(0).setSource(newSource);
+}
+
+// Event listener for the dropdown
+document.getElementById('mapSource').addEventListener('change', function () {
+    updateMapSource(this.value);
+});
 
 // When the submit button is clicked, this function is executed
 submit.onclick = () => {
