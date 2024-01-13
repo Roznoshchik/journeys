@@ -86,6 +86,15 @@
 {% endblock %}
 {% block body %}
 <div class="sidebar">
+    <select id="mapSource">
+        <option value="osm_bright">Bright</option>
+        <option value="stamen_toner">Stamen Toner</option>
+        <option value="stamen_watercolor">Stamen Watercolor</option>
+        <option value="stamen_terrain">Stamen Terrain</option>
+        <option value="alidade_smooth_dark">Stamen Alidade Smooth Dark</option>
+        <option value="outdoors">Outdoors</option>
+        <!-- Add more options as needed -->
+      </select>
     <div class="locations"></div>
     <div class="actions">
         <button class="add">Add another location</button>
