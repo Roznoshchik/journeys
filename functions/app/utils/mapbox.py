@@ -4,6 +4,18 @@ from urllib.parse import quote
 
 
 def get_geocoded_suggestions(address):
+    """
+    Retrieves geocoded suggestions for a given address using
+    the Mapbox Geocoding API.
+
+    Args:
+        address (str): The address to geocode.
+
+    Returns:
+        list: A list of geocoded feature suggestions if the API request
+        is successful and the response code is 200. Returns None if the
+        request fails or if a non-200 response code is received.
+    """
     MAPBOX_API_KEY = os.environ.get("MAPBOX_API_KEY")
     address = quote(address)
     url = f"https://api.mapbox.com/geocoding/v5/mapbox.places/{address}.json"

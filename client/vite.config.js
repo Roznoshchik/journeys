@@ -4,13 +4,14 @@ import path from 'path';
 
 export default defineConfig({
   build: {
-    sourcemap: true, // keep the sourcemaps
-    minify: false,
+    sourcemap: true, // sourcemaps allow us to still see the actual code in the console debugger
+    minify: false, // eventually we can set this, but for now the codebase is still small
     outDir: '../functions/app/static/', // set the output directory for static assets
     emptyOutDir: true, // clear the directory before building
     rollupOptions: {
       output: {
-        // Set constant file names without hash suffixes
+        // Set constant file names without hash suffixes - I think eventually we want to remove this to allow
+        // for proper caching.
         entryFileNames: 'main.js',
         chunkFileNames: 'main.js',
         assetFileNames: ({ name }) => {
@@ -24,6 +25,9 @@ export default defineConfig({
     }
   },
   plugins: [
+    // Images being imported were not adding the /static prefix despite all the documentation
+    // and the proper config. So for now, we will ignore that and just manually add the src to
+    // our images and then copy over the whole file using this function.
     {
       name: 'handle-images',
       writeBundle() {
@@ -40,6 +44,9 @@ export default defineConfig({
         });
       }
     },
+    // Since for now we are using Flask, we need to follow it's folder structure.
+    // This allows us to write the code here and ensure that all the proper files are
+    // copied over to the proper location so that Flask can recognize them.
     {
       name: 'handle-index-html',
       writeBundle() {

@@ -6,7 +6,8 @@ import os
 from werkzeug.test import EnvironBuilder
 
 
-# This function converts an AWS ApiGateway event into a WSGI Environ that flask recognizes.
+# This function converts an AWS ApiGateway event into
+# a WSGI Environ that flask recognizes.
 def build_wsgi_environ_from_event(event):
     """Create a WSGI environment from the proxy integration event."""
     params = event.get("multiValueQueryStringParameters")
