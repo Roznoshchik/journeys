@@ -9,7 +9,13 @@ import VectorLayer from 'ol/layer/Vector';
 import { Icon, Style } from 'ol/style.js';
 import { StadiaMaps } from 'ol/source';
 import TileLayer from 'ol/layer/Tile';
-import OSM from 'ol/source/OSM';
+
+
+const ANIMATION_DURATION = 3000;
+const locations = document.querySelector('.locations');
+const add = document.querySelector('.add');
+const submit = document.querySelector('.submit');
+let addressTimeoutId = null;
 
 const map = new Map({
     target: 'map',
@@ -29,89 +35,110 @@ const map = new Map({
     })
 });
 
-const ANIMATION_DURATION = 3000;
-const locations = document.querySelector('.locations');
-const add = document.querySelector('.add');
-const submit = document.querySelector('.submit');
-const main = document.querySelector('.main');
-let addressTimeoutId = null;
-let validatedLocations = {};
-
-addLocationInput()  // we aren't rendering this to start, so initialize with first input.
-
-// Function to update the map source
-function updateMapSource(layer) {
-    const sourceOptions = {
-        stamen_toner: { layer: 'stamen_toner', retina: true },
-        stamen_watercolor: { layer: 'stamen_watercolor', retina: false },
-        stamen_terrain: { layer: 'stamen_terrain', retina: false },
-        alidade_smooth_dark: { layer: 'alidade_smooth_dark', retina: true },
-        outdoors: { layer: 'outdoors', retina: true },
-        osm_bright: { layer: 'osm_bright', retina: true },
-        // Add more sources as needed
-    };
-
-    const newSource = new StadiaMaps(sourceOptions[layer]);
-    map.getLayers().item(0).setSource(newSource);
-}
-
-// Event listener for the dropdown
+// Event listener for the map styles dropdown
 document.getElementById('mapSource').addEventListener('change', function () {
-    updateMapSource(this.value);
+    setMapSource(this.value, map);
 });
 
-// When the submit button is clicked, this function is executed
 submit.onclick = () => {
-    // Loop through each '.location' element
+    const locationData = getLocationFormData();
+    let allCoordinates = locationData.map(location => location.coordinates);
+    locationData.forEach(location => createPoint(location, map))
+
+    const { lineFeature, lineString, lineVectorLayer } = createLine(allCoordinates);
+
+    // Add the line layer to the map
+    map.addLayer(lineVectorLayer);
+
+    animateLine(lineString, lineFeature, allCoordinates)
+}
+
+add.onclick = addLocationInput;
+addLocationInput()  // we aren't rendering this to start, so initialize with first input.
+
+
+/**
+ * Extracts id, address, coordinates, arrival, and departure form data from all elements with the
+ * '.location' class. These objects are then aggregated into an array.
+ *
+ * @returns {Array} An array of objects, where each object contains the 'id', 'address', 'arrival',
+ *                  'departure', and coordinates values from one '.location' element.
+ *                  The array includes one object for each '.location' element found.
+ */
+function getLocationFormData() {
+    const data = [];
     for (let location of locations.querySelectorAll('.location')) {
-        // Retrieve input values from the location element
-        const address = location.querySelector('input[name=address]');
-        const arrival = location.querySelector('input[name=arrival]');
-        const departure = location.querySelector('input[name=departure]');
-        const id = address.id;
+        const addressElem = location.querySelector('input[name=address]');
+        const address = addressElem.value;
+        const arrival = location.querySelector('input[name=arrival]').value;
+        const departure = location.querySelector('input[name=departure]').value;
+        const id = addressElem.id;
+        const coordinates = addressElem.getAttribute('data-coordinates');
 
-        // Update the validatedLocations object with the new data
-        validatedLocations[id].address = address.value;
-        validatedLocations[id].arrival = arrival.value;
-        validatedLocations[id].departure = departure.value;
-    };
-    let allCoordinates = []
-    // Loop through each location in validatedLocations
-    for (const location of Object.values(validatedLocations)) {
-        allCoordinates.push(location.coordinates)
-        // Create a point feature for each location
-        const point = new Point(fromLonLat(location.coordinates));
-        const feature = new Feature({
-            geometry: point
-        });
-
-        const iconStyle = new Style({
-            image: new Icon({
-                anchor: [0.5, 0.5],
-                scale: ".5",
-                anchorXUnits: 'fraction',
-                anchorYUnits: 'fraction',
-                src: 'static/images/rr.png',
-            }),
-        });
-        feature.setStyle(iconStyle)
-
-        // Create a source and layer for the point feature and add it to the map
-        const vectorSource = new VectorSource({
-            features: [feature]
-        });
-        const vectorLayer = new VectorLayer({
-            source: vectorSource
-        });
-        vectorLayer.setZIndex(100);
-
-        // Add the point layer to the map
-        map.addLayer(vectorLayer);
+        data.push({ id, address, arrival, departure, coordinates });
     }
+    return data;
+}
+
+/**
+ * Creates and adds a point feature to the map.
+ *
+ * @param {Object} location - An object containing the 'coordinates' property, which is an array of
+ *                           longitude and latitude values.
+ * @param {Object} map - The map object to which the point feature will be added. This should be an
+ *                      instance of an OpenLayers Map class.
+ *
+ * @returns {void} This function does not return a value. It makes visual updates to the DOM
+ */
+function createPoint(location, map) {
+    const point = new Point(fromLonLat(location.coordinates));
+    const feature = new Feature({
+        geometry: point
+    });
+
+    const iconStyle = new Style({
+        image: new Icon({
+            anchor: [0.5, 0.5],
+            scale: ".5",
+            anchorXUnits: 'fraction',
+            anchorYUnits: 'fraction',
+            src: 'static/images/rr.png',
+        }),
+    });
+    feature.setStyle(iconStyle)
+
+    // Create a source and layer for the point feature and add it to the map
+    const vectorSource = new VectorSource({
+        features: [feature]
+    });
+    const vectorLayer = new VectorLayer({
+        source: vectorSource
+    });
+    vectorLayer.setZIndex(100);
+
+    // Add the point layer to the map
+    map.addLayer(vectorLayer);
+}
 
 
+/**
+ * Creates and returns a LineString feature along with its vector layer.
+ *
+ * This function generates two LineString geometries: one with all the provided coordinates
+ * and another with just the initial coordinates. The initial LineString is used to prevent
+ * any rendering delays, ensuring a consistent user experience. The feature is set with
+ * the initial LineString, while the complete LineString is returned for further animation.
+ *
+ * @param {Array} coordinates - An array of coordinates (longitude, latitude pairs) used
+ *                              to create the LineString geometry.
+ *
+ * @return {Object} An object containing the LineString geometry ('lineString'),
+ *                  the LineString feature ('lineFeature'), and the vector layer
+ *                  ('lineVectorLayer') for the LineString. *
+ */
+function createLine(coordinates) {
     // Create a LineString with coordinates from each location
-    const lineString = new LineString(allCoordinates);
+    const lineString = new LineString(coordinates);
 
     // Transform the coordinates of the LineString to the map's projection
     lineString.transform('EPSG:4326', 'EPSG:3857');
@@ -131,13 +158,52 @@ submit.onclick = () => {
         source: lineVectorSource
     });
 
-    // Add the line layer to the map
-    // At this point, the line is created with all the coordinates but not yet visible
-    map.addLayer(lineVectorLayer);
-
-    animateLine(lineString, lineFeature, allCoordinates)
+    return { lineString, lineFeature, lineVectorLayer };
 }
 
+
+/**
+ * Sets the map's visual style based on a specified layer type.
+ *
+ * This function alters the visual appearance of the map by setting its source to a new
+ * style as defined in the `sourceOptions` object. It creates a new map source using
+ * the StadiaMaps service based on the provided layer identifier, and applies this
+ * source to the first layer of the passed `map` object.
+ *
+ * @param {string} layer - A string identifier for the map source layer, corresponding
+ *                         to a key in the `sourceOptions` object.
+ *
+ * @param {Object} map - The map object whose style will be changed. This should be an
+ *                      instance of an OpenLayers Map class.
+ *
+ * @returns {void} This function does not return a value. It makes visual updates to the DOM
+ */
+function setMapSource(layer, map) {
+    const sourceOptions = {
+        stamen_toner: { layer: 'stamen_toner', retina: true },
+        stamen_watercolor: { layer: 'stamen_watercolor', retina: false },
+        stamen_terrain: { layer: 'stamen_terrain', retina: false },
+        alidade_smooth_dark: { layer: 'alidade_smooth_dark', retina: true },
+        outdoors: { layer: 'outdoors', retina: true },
+        osm_bright: { layer: 'osm_bright', retina: true },
+        // Add more sources as needed
+    };
+
+    if (!sourceOptions.hasOwnProperty(layer)) {
+        console.error(`Invalid layer key: ${layer}`);
+        return;
+    }
+
+    const newSource = new StadiaMaps(sourceOptions[layer]);
+    const firstLayer = map.getLayers().item(0);
+    if (firstLayer) firstLayer.setSource(newSource);
+    else {
+        const newLayer = new TileLayer({
+            source: newSource
+        })
+        map.getLayers().push(newLayer);
+    }
+}
 
 /**
  * Animates the drawing of a line feature on a map, rendering it segment by segment.
@@ -150,6 +216,8 @@ submit.onclick = () => {
  *                                  through which the line will pass. It is the base geometry for the animation.
  * @param {Feature} lineFeature - The OpenLayers Feature object representing the line. This feature's geometry
  *                                will be updated during the animation to reflect the growing line.
+ *
+ * @returns {void} This function does not return a value. It makes visual updates to the DOM
  */
 function animateLine(lineString, lineFeature) {
     let index = 0;
@@ -192,8 +260,17 @@ function animateLine(lineString, lineFeature) {
     requestAnimationFrame(_animate);
 }
 
-add.onclick = addLocationInput;
-
+/**
+ * Adds a new location input section to the locations container.
+ *
+ * This function dynamically creates a new set of input fields for a location,
+ * including fields for address, arrival, and departure dates. Each input field
+ * is assigned a unique ID based on the count of existing location inputs.
+ * It also initializes an event listener for the address input to handle user input.
+ * The newly created location input section is then appended to the locations container.
+ *
+ * @returns {void} This function does not return a value. It modifes the DOM
+ */
 function addLocationInput() {
     const allLocations = document.querySelectorAll('.location');
     const locationsCount = allLocations.length + 1;
@@ -248,10 +325,8 @@ function handleAddressInput(address, suggestionsContainer) {
 }
 
 /**
- * Fetches address suggestions asynchronously from a defined endpoint
- * and renders them using the renderSuggestions function. It constructs
- * the request URL by appending '/get-address-suggestions' to the
- * current URL and makes a POST request with the address.
+ * Fetches address suggestions asynchronously and renders them
+ * using the renderSuggestions function.
  *
  * @param {HTMLElement} address - The input element for the address.
  * @param {HTMLElement} suggestionsContainer - The container where the
@@ -263,12 +338,6 @@ function handleAddressInput(address, suggestionsContainer) {
  * - A function named 'renderSuggestions' is defined elsewhere and is
  * responsible for rendering the suggestions data into the
  * suggestionsContainer.
- *
- * Error Handling:
- * - If the fetch request is successful (res.ok), it processes the
- * response JSON and calls renderSuggestions.
- * - If the fetch is unsuccessful, it attempts to log the JSON error
- * response; if that fails, it logs the text response.
  *
  * @returns {void} This function does not return a value. It performs
  * asynchronous operations and calls the renderSuggestions method.
@@ -299,9 +368,10 @@ async function getAddressSuggestions(address, suggestionsContainer) {
 
 
 /**
- * Renders a list of geocoded location suggestions below the search bar. Each
- * suggestion includes geographical data such as bounding box, center, context,
- * and place name. It updates the suggestionsContainer with these suggestions.
+ * Renders a list of geocoded location suggestions below the search bar.
+ * And adds an onclick event listener to each suggestion that will store
+ * the suggestion's coordinates on the address html element directly in the
+ * data-coordinates property.
  *
  * @param {Object[]} suggestions - An array of suggestion objects from the
  * geocoding API. Each suggestion object contains:
@@ -322,9 +392,6 @@ async function getAddressSuggestions(address, suggestionsContainer) {
  * @param {HTMLElement} suggestionsContainer - The container element where the
  * address suggestions will be rendered and updated.
  *
- * Assumptions:
- * - 'validatedLocations' is a predefined object where selected suggestions'
- *   coordinates are stored, indexed by the 'id' of the 'address' element.
  *
  * @returns {void} This function does not return a value. It modifies the DOM
  * directly, updating the suggestionsContainer with the provided suggestions.
@@ -345,7 +412,7 @@ function renderSuggestions(suggestions, address, suggestionsContainer) {
         option.textContent = suggestion.place_name;
         option.onclick = () => {
             address.value = suggestion.place_name;
-            validatedLocations[address.id] = { coordinates: suggestion.center };
+            address.setAttribute('data-coordinates', suggestion.center)
             suggestionsContainer.replaceChildren();
         };
         options.push(option);
