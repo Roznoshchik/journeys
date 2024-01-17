@@ -42,20 +42,31 @@ document.getElementById('mapSource').addEventListener('change', function () {
 
 submit.onclick = () => {
     const locationData = getLocationFormData();
-    let allCoordinates = locationData.map(location => location.coordinates);
-    locationData.forEach(location => createPoint(location, map))
+    let allCoordinates = [], pointLayers = [];
+
+    locationData.forEach(location => {
+        allCoordinates.push(JSON.parse(location.coordinates));
+        pointLayers.push(createPoint(location));
+    })
 
     const { lineFeature, lineString, lineVectorLayer } = createLine(allCoordinates);
 
     // Add the line layer to the map
     map.addLayer(lineVectorLayer);
-
+    animatePoints(pointLayers);
     animateLine(lineString, lineFeature, allCoordinates)
 }
 
 add.onclick = addLocationInput;
 addLocationInput()  // we aren't rendering this to start, so initialize with first input.
 
+function animatePoints(pointLayers) {
+    let delay = 0;
+    pointLayers.forEach(layer => {
+        setTimeout(() => map.addLayer(layer), delay);
+        delay += 3000;
+    });
+}
 
 /**
  * Extracts id, address, coordinates, arrival, and departure form data from all elements with the
@@ -90,12 +101,12 @@ function getLocationFormData() {
  *
  * @returns {void} This function does not return a value. It makes visual updates to the DOM
  */
-function createPoint(location, map) {
-    const point = new Point(fromLonLat(location.coordinates));
+function createPoint(location) {
+    const point = new Point(fromLonLat(JSON.parse(location.coordinates)));
+
     const feature = new Feature({
         geometry: point
     });
-
     const iconStyle = new Style({
         image: new Icon({
             anchor: [0.5, 0.5],
@@ -116,8 +127,7 @@ function createPoint(location, map) {
     });
     vectorLayer.setZIndex(100);
 
-    // Add the point layer to the map
-    map.addLayer(vectorLayer);
+    return vectorLayer
 }
 
 
@@ -412,7 +422,7 @@ function renderSuggestions(suggestions, address, suggestionsContainer) {
         option.textContent = suggestion.place_name;
         option.onclick = () => {
             address.value = suggestion.place_name;
-            address.setAttribute('data-coordinates', suggestion.center)
+            address.setAttribute('data-coordinates', JSON.stringify(suggestion.center))
             suggestionsContainer.replaceChildren();
         };
         options.push(option);
