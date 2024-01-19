@@ -353,9 +353,9 @@ function handleAddressInput(address, suggestionsContainer) {
  * asynchronous operations and calls the renderSuggestions method.
  */
 async function getAddressSuggestions(address, suggestionsContainer) {
-    const currentUrl = window.location.href;
-    const targetUrl = currentUrl + '/get-address-suggestions'
-    const res = await fetch(targetUrl, {
+    const url = new URL(window.location.href);
+    url.pathname += url.pathname.endsWith('/') ? 'get-address-suggestions' : '/get-address-suggestions';
+    const res = await fetch(url.toString(), {
         method: 'POST',
         headers: {
             'content-type': 'application/json'
@@ -370,7 +370,7 @@ async function getAddressSuggestions(address, suggestionsContainer) {
             const error = await res.json()
             console.log(error)
         } catch {
-            console.log(res.text)
+            console.log(res.text())
 
         }
     }
