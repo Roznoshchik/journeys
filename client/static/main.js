@@ -3,19 +3,30 @@ import { Map, View } from 'ol';
 import Feature from 'ol/Feature.js';
 import Point from 'ol/geom/Point.js';
 import { LineString } from 'ol/geom';
-import { fromLonLat } from 'ol/proj';
+import { toLonLat } from 'ol/proj';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
 import { Icon, Style } from 'ol/style.js';
 import { StadiaMaps } from 'ol/source';
 import TileLayer from 'ol/layer/Tile';
+import { createEmpty as createEmptyBoundingBox, extend as extendBoundingBox } from 'ol/extent';
+import { getDistance } from 'ol/sphere';
+import { sleep } from './utilities';
 
 
-const ANIMATION_DURATION = 3000;
+const ANIMATION_DURATION = 10000;
 const locations = document.querySelector('.locations');
 const add = document.querySelector('.add');
 const submit = document.querySelector('.submit');
 let addressTimeoutId = null;
+let boundingBox = createEmptyBoundingBox(); // used at the end to zoom out to show all locations.
+let zoomLevel = 2;
+
+
+const view = new View({
+    center: [0, 0],
+    zoom: zoomLevel
+})
 
 const map = new Map({
     target: 'map',
@@ -29,10 +40,7 @@ const map = new Map({
             })
         })
     ],
-    view: new View({
-        center: [0, 0],
-        zoom: 2
-    })
+    view: view
 });
 
 // Event listener for the map styles dropdown
@@ -40,69 +48,33 @@ document.getElementById('mapSource').addEventListener('change', function () {
     setMapSource(this.value, map);
 });
 
-submit.onclick = () => {
+submit.onclick = async () => {
     const locationData = getLocationFormData();
-    let allCoordinates = [], pointLayers = [];
+    let allCoordinates = []
 
     locationData.forEach(location => {
         allCoordinates.push(JSON.parse(location.coordinates));
-        pointLayers.push(createPoint(location));
     })
 
     const { lineFeature, lineString, lineVectorLayer } = createLine(allCoordinates);
 
     // Add the line layer to the map
     map.addLayer(lineVectorLayer);
-    animatePoints(pointLayers);
     animateLine(lineString, lineFeature, allCoordinates)
 }
 
 add.onclick = addLocationInput;
 addLocationInput()  // we aren't rendering this to start, so initialize with first input.
 
-function animatePoints(pointLayers) {
-    let delay = 0;
-    pointLayers.forEach(layer => {
-        setTimeout(() => map.addLayer(layer), delay);
-        delay += 3000;
-    });
-}
 
 /**
- * Extracts id, address, coordinates, arrival, and departure form data from all elements with the
- * '.location' class. These objects are then aggregated into an array.
+ * Creates a vector layer containing a point feature.
  *
- * @returns {Array} An array of objects, where each object contains the 'id', 'address', 'arrival',
- *                  'departure', and coordinates values from one '.location' element.
- *                  The array includes one object for each '.location' element found.
+ * @param {Object} coords - The coordinates for the new point
+ * @returns {VectorLayer} A vector layer containing the point feature.
  */
-function getLocationFormData() {
-    const data = [];
-    for (let location of locations.querySelectorAll('.location')) {
-        const addressElem = location.querySelector('input[name=address]');
-        const address = addressElem.value;
-        const arrival = location.querySelector('input[name=arrival]').value;
-        const departure = location.querySelector('input[name=departure]').value;
-        const id = addressElem.id;
-        const coordinates = addressElem.getAttribute('data-coordinates');
-
-        data.push({ id, address, arrival, departure, coordinates });
-    }
-    return data;
-}
-
-/**
- * Creates and adds a point feature to the map.
- *
- * @param {Object} location - An object containing the 'coordinates' property, which is an array of
- *                           longitude and latitude values.
- * @param {Object} map - The map object to which the point feature will be added. This should be an
- *                      instance of an OpenLayers Map class.
- *
- * @returns {void} This function does not return a value. It makes visual updates to the DOM
- */
-function createPoint(location) {
-    const point = new Point(fromLonLat(JSON.parse(location.coordinates)));
+function _createPoint(coords) {
+    const point = new Point(coords);
 
     const feature = new Feature({
         geometry: point
@@ -130,6 +102,28 @@ function createPoint(location) {
     return vectorLayer
 }
 
+/**
+ * Renders a point on the map and optionally animates the map view to center on this point.
+ *
+ * It also updates the bounding box to include the newly added point's extent.
+ *
+ * @param {number[]} coords - The coordinates where the point will be rendered.
+ * @param {boolean} [shouldAnimate=false] - determines whether the map view should animate to center on the new point.
+ * @returns {void} This function does not return a value. It performs operations that result in visual changes on the map.
+ */
+function renderPoint(coords, shouldAnimate = false) {
+    let point = _createPoint(coords);
+    map.addLayer(point);
+
+    const pointBoundary = point.getSource().getExtent();
+    extendBoundingBox(boundingBox, pointBoundary);
+
+    shouldAnimate && view.animate({
+        center: coords,
+        zoom: zoomLevel,
+        duration: 1500
+    })
+}
 
 /**
  * Creates and returns a LineString feature along with its vector layer.
@@ -171,6 +165,71 @@ function createLine(coordinates) {
     return { lineString, lineFeature, lineVectorLayer };
 }
 
+
+/**
+ * Animates the drawing of a line feature and plots points on a map, rendering it segment by segment,
+ * and adjusting the map's view.
+ *
+ * @param {LineString} lineString - The OpenLayers LineString object, containing the coordinates for the line animation.
+ * @param {Feature} lineFeature - The OpenLayers Feature object representing the line, updated during the animation.
+ * @returns {void} This function does not return a value. It makes visual updates to the DOM.
+ */
+async function animateLine(lineString, lineFeature) {
+    let index = 0;
+    const totalSegments = lineString.getCoordinates().length - 1;
+    const segmentDuration = ANIMATION_DURATION;
+    let segmentStart = null;
+    let startCoords = lineString.getCoordinates()[0];
+    let nextCoords = lineString.getCoordinates()[1];
+
+    zoomLevel = getZoomLevel(startCoords, nextCoords); //preparing to zoom in on first point
+
+    renderPoint(startCoords, true)
+
+    let coordsToRender = [startCoords];
+    await sleep(3000)
+
+    async function _animate(timestamp) {
+        if (index >= totalSegments) {
+            showAllPoints();
+            return;  // Animation complete
+        }
+
+        if (!segmentStart) segmentStart = timestamp;
+        const elapsed = timestamp - segmentStart;
+
+        const segmentStartCoords = lineString.getCoordinates()[index];
+        const segmentEndCoords = lineString.getCoordinates()[index + 1];
+        if (elapsed < segmentDuration) {
+
+            const percentComplete = elapsed / segmentDuration;
+            const interpolatedCoord = [
+                segmentStartCoords[0] + (segmentEndCoords[0] - segmentStartCoords[0]) * percentComplete,
+                segmentStartCoords[1] + (segmentEndCoords[1] - segmentStartCoords[1]) * percentComplete,
+            ];
+            // Include all previous segments plus the current interpolated coordinate
+            const currentLineString = new LineString([...coordsToRender, interpolatedCoord]);
+            lineFeature.setGeometry(currentLineString);
+            view.animate({
+                center: interpolatedCoord,
+                duration: 0,
+            })
+            requestAnimationFrame(_animate);
+        } else {
+            // Segment completed, prepare for the next segment
+            renderPoint(segmentEndCoords);
+            coordsToRender.push(segmentEndCoords);
+            segmentStart = null;
+            index++; // this sets the index to the end coordinates
+            const nextCoords = index + 1 <= totalSegments ? lineString.getCoordinates()[index + 1] : null;
+            await sleep(3000);
+            await adjustZoomIfNecessary(segmentEndCoords, nextCoords);
+            requestAnimationFrame(_animate);
+        }
+    }
+
+    requestAnimationFrame(_animate);
+}
 
 /**
  * Sets the map's visual style based on a specified layer type.
@@ -215,59 +274,82 @@ function setMapSource(layer, map) {
     }
 }
 
+
 /**
- * Animates the drawing of a line feature on a map, rendering it segment by segment.
+ * Adjusts the map view to fit all rendered points within the current bounding box.
  *
- * This function progressively draws a line, which is defined by a LineString object, by animating
- * each segment for a specified duration. The animation visually represents the line being drawn from
- * one coordinate to the next, creating a dynamic effect on the map.
- *
- * @param {LineString} lineString - The OpenLayers LineString object, which contains the coordinates
- *                                  through which the line will pass. It is the base geometry for the animation.
- * @param {Feature} lineFeature - The OpenLayers Feature object representing the line. This feature's geometry
- *                                will be updated during the animation to reflect the growing line.
- *
- * @returns {void} This function does not return a value. It makes visual updates to the DOM
+ * @returns {void} This function does not return a value. It performs operations that result in visual changes on the map.
  */
-function animateLine(lineString, lineFeature) {
-    let index = 0;
-    const totalSegments = lineString.getCoordinates().length - 1;
-    const segmentDuration = ANIMATION_DURATION;
-    let segmentStart = null;
-    let startCoords = lineString.getCoordinates()[0]
-    let coordsToRender = [startCoords];
+function showAllPoints() {
+    map.getView().fit(boundingBox, { padding: [50, 50, 50, 50], duration: 3000 });
+}
 
-    function _animate(timestamp) {
-        if (index >= totalSegments) {
-            return;  // Animation complete
-        }
+/**
+ * Calculates an appropriate zoom level for a map based on the distance between two geographic coordinates.
+ *
+ * @param {number[]} startCoords - The starting coordinates in 'EPSG:3857' format to be converted to longitude and latitude.
+ * @param {number[] | null} nextCoords - The next coordinates in 'EPSG:3857' format to be converted to longitude and latitude.
+ *                                       If null, the current zoom level is returned.
+ * @returns {number} The calculated zoom level based on the distance between the converted startCoords and nextCoords.
+ */
+function getZoomLevel(startCoords, nextCoords) {
+    if (!nextCoords) return zoomLevel;
 
-        if (!segmentStart) segmentStart = timestamp;
-        const elapsed = timestamp - segmentStart;
+    const start = toLonLat(startCoords);
+    const next = toLonLat(nextCoords);
+    const distance = getDistance(start, next);
 
-        const segmentStartCoords = lineString.getCoordinates()[index];
-        const segmentEndCoords = lineString.getCoordinates()[index + 1];
-        if (elapsed < segmentDuration) {
+    // Define your logic for determining the zoom level based on distance
+    const closeZoomLevel = 10; // closer zoom for short distances
+    const defaultZoom = 5;  // farther zoom for long distances
+    const thresholdDistance = 1500000; // Example threshold distance (1500 km)
 
-            const percentComplete = elapsed / segmentDuration;
-            const interpolatedCoord = [
-                segmentStartCoords[0] + (segmentEndCoords[0] - segmentStartCoords[0]) * percentComplete,
-                segmentStartCoords[1] + (segmentEndCoords[1] - segmentStartCoords[1]) * percentComplete,
-            ];
-            // Include all previous segments plus the current interpolated coordinate
-            const currentLineString = new LineString([...coordsToRender, interpolatedCoord]);
-            lineFeature.setGeometry(currentLineString);
-            requestAnimationFrame(_animate);
-        } else {
-            // Segment completed, prepare for the next segment
-            coordsToRender.push(segmentEndCoords);
-            index++;
-            segmentStart = null;
-            requestAnimationFrame(_animate);
-        }
+    // Check if distance is a number
+    if (typeof distance === 'number') {
+        const newZoomLevel = distance < thresholdDistance ? closeZoomLevel : defaultZoom;
+        return newZoomLevel
+    } else {
+        return zoomLevel; // returning what we have now.
     }
+}
 
-    requestAnimationFrame(_animate);
+/**
+ * Optionally adjusts the zoom level of the map view based on the provided start and end coordinates.
+ *
+ * @param {number[]} startCoords - The starting coordinates
+ * @param {number[]} endCoords - The ending coordinates,
+ * @returns {Promise<void>} A promise that resolves when the zoom adjustment and animation are complete.
+ */
+async function adjustZoomIfNecessary(startCoords, endCoords) {
+    const newZoomLevel = getZoomLevel(startCoords, endCoords);
+    if (newZoomLevel != zoomLevel) {
+        zoomLevel = newZoomLevel;
+        view.animate({ zoom: zoomLevel, duration: 1500 });
+        await sleep(1500);
+    }
+}
+
+/**
+ * Extracts id, address, coordinates, arrival, and departure form data from all elements with the
+ * '.location' class. These objects are then aggregated into an array.
+ *
+ * @returns {Array} An array of objects, where each object contains the 'id', 'address', 'arrival',
+ *                  'departure', and coordinates values from one '.location' element.
+ *                  The array includes one object for each '.location' element found.
+ */
+function getLocationFormData() {
+    const data = [];
+    for (let location of locations.querySelectorAll('.location')) {
+        const addressElem = location.querySelector('input[name=address]');
+        const address = addressElem.value;
+        const arrival = location.querySelector('input[name=arrival]').value;
+        const departure = location.querySelector('input[name=departure]').value;
+        const id = addressElem.id;
+        const coordinates = addressElem.getAttribute('data-coordinates');
+
+        data.push({ id, address, arrival, departure, coordinates });
+    }
+    return data;
 }
 
 /**
