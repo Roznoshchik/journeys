@@ -12,6 +12,7 @@ import TileLayer from 'ol/layer/Tile';
 import { createEmpty as createEmptyBoundingBox, extend as extendBoundingBox } from 'ol/extent';
 import { getDistance } from 'ol/sphere';
 import { sleep } from './utilities';
+import gifler from 'gifler';
 
 
 const ANIMATION_DURATION = 10000;
@@ -126,6 +127,61 @@ function renderPoint(coords, shouldAnimate = false) {
 }
 
 /**
+ * Creates a feature with a point geometry and an animated GIF as its icon.
+ *
+ * This function generates a new OpenLayers Feature with a Point geometry set to the given coordinates.
+ * It uses the 'gifler' library to animate a GIF image, which is set as the icon style for the feature.
+ * The GIF animation is continuously updated and rendered on the map.
+ *
+ * @param {Array<number>} coords - The coordinates where the point feature will be created.
+ * @returns {ol.Feature} The created point feature with the animated GIF icon.
+ */
+function createTemporaryPoint(coords) {
+    const point = new Point(coords);
+    const feature = new Feature({
+        geometry: point
+    });
+
+    const gifUrl = 'static/images/ciepa.gif';
+    const gif = window.gifler(gifUrl);
+    gif.frames(
+        document.createElement('canvas'),
+        function (ctx, frame) {
+            if (!feature.getStyle()) {
+                feature.setStyle(
+                    new Style({
+                        image: new Icon({
+                            anchor: [0.5, 0.5],
+                            scale: ".5",
+                            anchorXUnits: 'fraction',
+                            anchorYUnits: 'fraction',
+                            img: ctx.canvas,
+                        }),
+                    }));
+            }
+            ctx.clearRect(0, 0, frame.width, frame.height);
+            ctx.drawImage(frame.buffer, frame.x, frame.y);
+            map.render();
+        },
+        true
+    );
+    return feature;
+}
+
+/**
+ * Updates the coordinates of a given point feature. If the feature does not exist, it creates a new temporary point feature at the specified coordinates.
+ *
+ * @param {ol.Feature} feature - The feature whose coordinates need to be updated.
+ * @param {Array<number>} coords - The new coordinates for the feature.
+ */
+function updatePointCoordinates(feature, coords) {
+    if (!feature) feature = createTemporaryPoint(coords);
+    const pointGeometry = feature.getGeometry();
+    pointGeometry.setCoordinates(coords);
+}
+
+
+/**
  * Creates and returns a LineString feature along with its vector layer.
  *
  * This function generates two LineString geometries: one with all the provided coordinates
@@ -182,6 +238,16 @@ async function animateLine(lineString, lineFeature) {
     let startCoords = lineString.getCoordinates()[0];
     let nextCoords = lineString.getCoordinates()[1];
 
+    // Create a temporary point that will appear at the end of the line as it animates.
+    let temporaryPointFeature = createTemporaryPoint(startCoords);
+    const sharedVectorSource = new VectorSource();
+    const sharedVectorLayer = new VectorLayer({
+        source: sharedVectorSource
+    });
+    sharedVectorLayer.setZIndex(1000);
+    sharedVectorSource.addFeature(temporaryPointFeature);
+    map.addLayer(sharedVectorLayer);
+
     zoomLevel = getZoomLevel(startCoords, nextCoords); //preparing to zoom in on first point
 
     renderPoint(startCoords, true)
@@ -191,6 +257,7 @@ async function animateLine(lineString, lineFeature) {
 
     async function _animate(timestamp) {
         if (index >= totalSegments) {
+            sharedVectorSource.removeFeature(temporaryPointFeature); // remove image at end of line
             showAllPoints();
             return;  // Animation complete
         }
@@ -207,6 +274,8 @@ async function animateLine(lineString, lineFeature) {
                 segmentStartCoords[0] + (segmentEndCoords[0] - segmentStartCoords[0]) * percentComplete,
                 segmentStartCoords[1] + (segmentEndCoords[1] - segmentStartCoords[1]) * percentComplete,
             ];
+            updatePointCoordinates(temporaryPointFeature, interpolatedCoord);
+
             // Include all previous segments plus the current interpolated coordinate
             const currentLineString = new LineString([...coordsToRender, interpolatedCoord]);
             lineFeature.setGeometry(currentLineString);
