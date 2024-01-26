@@ -70,10 +70,9 @@ class FlaskLambda(Flask):
             isBase64Encoded = False
 
         proxy = {
+            "isBase64Encoded": isBase64Encoded,
             "statusCode": int(wsgi_status[0].split()[0]),
             "headers": {h[0]: h[1] for h in wsgi_headers[0]},
             "body": body,
-            "isBase64Encoded": isBase64Encoded,
         }
-
         return proxy
