@@ -10,7 +10,7 @@
     "vite": "^5.0.10"
   },
   "dependencies": {
-    "gifler": "^0.1.0",
+    "gifler": "github:Roznoshchik/gifler",
     "ol": "latest"
   }
 }
