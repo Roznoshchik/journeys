@@ -32,9 +32,7 @@ export default defineConfig({
       name: 'handle-images',
       writeBundle() {
         const imagesSrc = path.resolve(__dirname, './static/images/');
-        console.log(imagesSrc)
         const imagesDst = path.resolve(__dirname, '../functions/app/static/images/');
-        console.log(imagesDst)
 
         fs.cp(imagesSrc, imagesDst, { recursive: true }, (err) => {
           if (err) {
