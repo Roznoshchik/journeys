@@ -19,6 +19,8 @@ const ANIMATION_DURATION = 10000;
 const locations = document.querySelector('.locations');
 const add = document.querySelector('.add');
 const submit = document.querySelector('.submit');
+const main = document.querySelector(".main");
+const mapClose = document.querySelector('.close');
 let addressTimeoutId = null;
 let boundingBox = createEmptyBoundingBox(); // used at the end to zoom out to show all locations.
 let zoomLevel = 2;
@@ -56,7 +58,9 @@ submit.onclick = async () => {
     locationData.forEach(location => {
         allCoordinates.push(JSON.parse(location.coordinates));
     })
+    let inFullScreen = requestFullscreen(main);
 
+    inFullScreen ? (mapClose.style.display = 'block') : main.scrollIntoView();
     const { lineFeature, lineString, lineVectorLayer } = createLine(allCoordinates);
 
     // Add the line layer to the map
@@ -64,8 +68,33 @@ submit.onclick = async () => {
     animateLine(lineString, lineFeature, allCoordinates)
 }
 
+mapClose.onclick = (event) => {
+    if (document.fullscreenElement) {
+        document
+            .exitFullscreen()
+            .then(() => {
+                mapClose.style.display = 'none';
+            })
+            .catch((err) => console.error(err));
+    }
+};
+
 add.onclick = addLocationInput;
 addLocationInput()  // we aren't rendering this to start, so initialize with first input.
+
+function requestFullscreen(elem) {
+    try {
+        main.requestFullscreen();
+        return true
+    } catch {
+        try {
+            main.webkitRequestFullscreen();
+            return true;
+        } catch {
+            return false
+        }
+    }
+}
 
 
 /**
