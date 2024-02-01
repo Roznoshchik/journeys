@@ -24,6 +24,7 @@ const mapClose = document.querySelector('.close');
 let addressTimeoutId = null;
 let boundingBox = createEmptyBoundingBox(); // used at the end to zoom out to show all locations.
 let zoomLevel = 2;
+const audio = document.getElementById('bgMusic');
 
 
 const view = new View({
@@ -35,7 +36,7 @@ const map = new Map({
     target: 'map',
     layers: [
         new TileLayer({
-
+            preload: Infinity,
             source: new StadiaMaps({
                 // See our gallery for more styles: https://docs.stadiamaps.com/themes/
                 layer: 'osm_bright',
@@ -43,7 +44,9 @@ const map = new Map({
             })
         })
     ],
-    view: view
+    view: view,
+    loadTilesWhileAnimating: true,
+    loadTilesWhileInteracting: false,
 });
 
 // Event listener for the map styles dropdown
@@ -69,14 +72,7 @@ submit.onclick = async () => {
 }
 
 mapClose.onclick = (event) => {
-    if (document.fullscreenElement) {
-        document
-            .exitFullscreen()
-            .then(() => {
-                mapClose.style.display = 'none';
-            })
-            .catch((err) => console.error(err));
-    }
+    exitFullscreen()
 };
 
 add.onclick = addLocationInput;
@@ -96,6 +92,16 @@ function requestFullscreen(elem) {
     }
 }
 
+function exitFullscreen() {
+    if (document.fullscreenElement) {
+        document
+            .exitFullscreen()
+            .then(() => {
+                mapClose.style.display = 'none';
+            })
+            .catch((err) => console.error(err));
+    }
+}
 
 /**
  * Creates a vector layer containing a point feature.
@@ -115,7 +121,7 @@ function _createPoint(coords) {
             scale: ".5",
             anchorXUnits: 'fraction',
             anchorYUnits: 'fraction',
-            src: 'static/images/rr.png',
+            src: 'static/media/images/rr.png',
         }),
     });
     feature.setStyle(iconStyle)
@@ -151,7 +157,7 @@ function renderPoint(coords, shouldAnimate = false) {
     shouldAnimate && view.animate({
         center: coords,
         zoom: zoomLevel,
-        duration: 1500
+        duration: 3000
     })
 }
 
@@ -171,7 +177,7 @@ function createTemporaryPoint(coords) {
         geometry: point
     });
 
-    const gifUrl = 'static/images/ciepa.gif';
+    const gifUrl = 'static/media/images/ciepa.gif';
     const gif = window.gifler(gifUrl);
     gif.frames(
         document.createElement('canvas'),
@@ -244,7 +250,8 @@ function createLine(coordinates) {
         features: [lineFeature]
     });
     const lineVectorLayer = new VectorLayer({
-        source: lineVectorSource
+        source: lineVectorSource,
+        zIndex: 999
     });
 
     return { lineString, lineFeature, lineVectorLayer };
@@ -280,6 +287,7 @@ async function animateLine(lineString, lineFeature) {
     zoomLevel = getZoomLevel(startCoords, nextCoords); //preparing to zoom in on first point
 
     renderPoint(startCoords, true)
+    setTimeout(() => audio.play(), 3000);
 
     let coordsToRender = [startCoords];
     await sleep(3000)
@@ -288,6 +296,9 @@ async function animateLine(lineString, lineFeature) {
         if (index >= totalSegments) {
             sharedVectorSource.removeFeature(temporaryPointFeature); // remove image at end of line
             showAllPoints();
+            await sleep(5000)
+            audio.pause();
+            audio.fastSeek(0);
             return;  // Animation complete
         }
 
@@ -378,8 +389,10 @@ function setMapSource(layer, map) {
  *
  * @returns {void} This function does not return a value. It performs operations that result in visual changes on the map.
  */
-function showAllPoints() {
-    map.getView().fit(boundingBox, { padding: [50, 50, 50, 50], duration: 3000 });
+async function showAllPoints() {
+    map.getView().fit(boundingBox, { padding: [50, 50, 50, 50], duration: 3500 });
+    await sleep(6000)
+    exitFullscreen()
 }
 
 /**
@@ -400,13 +413,31 @@ function getZoomLevel(startCoords, nextCoords) {
     // Define your logic for determining the zoom level based on distance
     const closeZoomLevel = 10; // closer zoom for short distances
     const defaultZoom = 5;  // farther zoom for long distances
-    const thresholdDistance = 1500000; // Example threshold distance (1500 km)
+
+    // Define thresholds and corresponding zoom levels
+    const thresholds = [
+        { distance: 50000, zoomLevel: 12 },    // For distances less than 50 km
+        { distance: 200000, zoomLevel: 10 },   // For distances less than 200 km
+        { distance: 500000, zoomLevel: 9 },    // For distances less than 500 km
+        { distance: 1000000, zoomLevel: 8 },   // For distances less than 1000 km
+        { distance: 1500000, zoomLevel: 7 },   // For distances up to 1500 km (e.g., Tokyo to Okinawa)
+        { distance: 2000000, zoomLevel: 6 },   // For distances up to 2000 km
+        { distance: 3000000, zoomLevel: 5 },   // For distances up to 3000 km
+        { distance: 8000000, zoomLevel: 4 }    // For distances above 3000 km, maintaining 4 as the lowest level
+    ];
 
     // Check if distance is a number
     if (typeof distance === 'number') {
-        const newZoomLevel = distance < thresholdDistance ? closeZoomLevel : defaultZoom;
+        let newZoomLevel = thresholds[thresholds.length - 1].zoomLevel; // Default to the most zoomed out level
+        for (let i = 0; i < thresholds.length; i++) {
+            if (distance < thresholds[i].distance) {
+                newZoomLevel = thresholds[i].zoomLevel;
+                break;
+            }
+        }
         return newZoomLevel
     } else {
+        console.error('Distance is not a number');
         return zoomLevel; // returning what we have now.
     }
 }
@@ -422,8 +453,8 @@ async function adjustZoomIfNecessary(startCoords, endCoords) {
     const newZoomLevel = getZoomLevel(startCoords, endCoords);
     if (newZoomLevel != zoomLevel) {
         zoomLevel = newZoomLevel;
-        view.animate({ zoom: zoomLevel, duration: 1500 });
-        await sleep(1500);
+        view.animate({ zoom: zoomLevel, duration: 3000 });
+        await sleep(3000);
     }
 }
 

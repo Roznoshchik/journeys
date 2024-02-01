@@ -60,7 +60,7 @@ class FlaskLambda(Flask):
                 content_type = value
                 break
 
-        if content_type and content_type.startswith("image/"):
+        if content_type and content_type.startswith(("image/", "audio/")):
             # Return image data as binary response
             body = base64.b64encode(b"".join(resp)).decode("utf-8")
             isBase64Encoded = True
