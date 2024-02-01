@@ -29,15 +29,15 @@ export default defineConfig({
     // and the proper config. So for now, we will ignore that and just manually add the src to
     // our images and then copy over the whole file using this function.
     {
-      name: 'handle-images',
+      name: 'handle-static-media',
       writeBundle() {
-        const imagesSrc = path.resolve(__dirname, './static/images/');
-        const imagesDst = path.resolve(__dirname, '../functions/app/static/images/');
+        const mediaSrc = path.resolve(__dirname, './static/media');
+        const mediaDst = path.resolve(__dirname, '../functions/app/static/media');
 
-        fs.cp(imagesSrc, imagesDst, { recursive: true }, (err) => {
+        fs.cp(mediaSrc, mediaDst, { recursive: true }, (err) => {
           if (err) {
-            fs.mkdirSync(imagesDst);
-            fs.cpSync(imagesSrc, imagesDst, { recursive: true }, (err) => console.log(err))
+            fs.mkdirSync(mediaDst);
+            fs.cpSync(mediaSrc, mediaDst, { recursive: true }, (err) => console.log(err))
           }
         });
       }
@@ -68,23 +68,6 @@ export default defineConfig({
             console.log(`Original index.html copied to ${templatesDestination}`);
           }
         });
-
-        // Read the copied index.html and update static urls.
-        fs.readFile(templatesDestination, 'utf8', function (err, data) {
-          if (err) {
-            return console.log(err);
-          }
-          // Regular expression to match 'static/**.**'
-          const regex = /static\/(.*?)\.(js|css|jpg|png|gif|svg)/g;
-          // Replace found instances with the Flask url_for syntax
-          const result = data.replace(regex, "{{ url_for('static', filename='$1.$2') }}");
-
-          // Write the result to the same file
-          fs.writeFile(templatesDestination, result, 'utf8', function (err) {
-            if (err) return console.log(err);
-          });
-        });
-
 
         // Delete the index.html in static directory if it exists
         if (fs.existsSync(staticIndexHtml)) {
