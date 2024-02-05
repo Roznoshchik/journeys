@@ -510,10 +510,21 @@ function addLocationInput() {
     <div class="form-item">
         <label for="departure-${locationsCount}">Departure</label>
         <input type="date" id="departure-${locationsCount}" name="departure">
-    </div>`;
+    </div>
+    <div class="form-item">
+        <label for="images-${locationsCount}" class="custom-file-label">Choose files</label>
+        <input type="file" id="images-${locationsCount}" accept="image/*" multiple name="images">
+        <div class="file-count-warning">Only 3 images per location</div>
+        <div class="images-container"></div>
+    </div>
+    `;
     const address = location.querySelector(`#address-${locationsCount}`);
     const suggestionsContainer = location.querySelector('.suggestions');
+    const images = location.querySelector(`#images-${locationsCount}`)
+    const imagesContainer = location.querySelector('.images-container');
+    const imageCountWarning = location.querySelector('.file-count-warning')
     address.oninput = () => handleAddressInput(address, suggestionsContainer);
+    images.onchange = () => handleImagesInput(images, imagesContainer, imageCountWarning);
 
     locations.append(location);
 }
@@ -544,6 +555,76 @@ function handleAddressInput(address, suggestionsContainer) {
         addressTimeoutId = setTimeout(() => getAddressSuggestions(address, suggestionsContainer), 1000)
     }
 }
+
+function handleImagesInput(fileInput, imagesContainer, imageCountWarning) {
+    const files = fileInput.files;
+    if (imagesContainer.children.length + files.length > 3) {
+        imageCountWarning.style.display = 'block';
+        return;
+    } else {
+        imageCountWarning.style.display = 'none';
+    }
+
+    const existingFiles = Array.from(imagesContainer.children).map(el => el.getAttribute('file-name'));
+    Array.from(files).forEach(file => {
+        if (existingFiles.includes(file.name)) return;
+        const reader = new FileReader();
+        reader.onload = function (e) {
+            const img = new Image();
+            img.onload = function () {
+                // Determine the scale factor and cropping dimensions
+                const scale = 85 / Math.min(img.width, img.height);
+                const scaledWidth = img.width * scale;
+                const scaledHeight = img.height * scale;
+                const dx = (scaledWidth - 85) / 2;
+                const dy = (scaledHeight - 85) / 2;
+
+                // Create a canvas to resize and crop the image
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = canvas.height = 85; // Target dimensions
+
+                // Draw the image onto the canvas with scaling and center cropping
+                ctx.drawImage(img, -dx, -dy, scaledWidth, scaledHeight);
+
+                // Convert canvas to an image for preview
+                const src = canvas.toDataURL('image/jpeg');
+
+                // Display the thumbnail
+                const thumbnail = new Image();
+                thumbnail.src = src;
+
+                // Assuming this part is inside your image onload function
+                const photoContainer = document.createElement('div');
+                photoContainer.className = 'photo';
+                photoContainer.setAttribute('file-name', file.name)
+
+                // Assuming 'thumbnail' is your image element
+                photoContainer.appendChild(thumbnail);
+
+                const closeIcon = document.createElement('span');
+                closeIcon.innerHTML = '&times;'; // Using HTML entity for simplicity
+                closeIcon.className = 'close';
+                photoContainer.appendChild(closeIcon);
+
+                closeIcon.onclick = () => removeImage(file.name, imagesContainer) ;
+
+                imagesContainer.appendChild(photoContainer);
+            };
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    });
+}
+
+function removeImage(filename, imagesContainer) {
+    let selector = `[file-name="${filename}"]`; // Construct the attribute selector
+    let element = imagesContainer.querySelector(selector);
+    if (element) {
+        element.remove(); // Remove the element if it's found
+    }
+}
+
 
 /**
  * Fetches address suggestions asynchronously and renders them

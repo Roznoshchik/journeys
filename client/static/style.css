@@ -1,1 +1,184 @@
 @import "../node_modules/ol/ol.css";
+
+html {
+    height: 100%;
+
+    * {
+        box-sizing: border-box;
+    }
+}
+
+body {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    height: 100%;
+    font-size: 16px;
+}
+button {
+    cursor: pointer;
+}
+
+input {
+    font-size: 16px;
+}
+
+.main {
+    height: calc(100vh - 16px);
+    flex-grow: 1;
+    position: relative;
+    padding: 8px;
+    background-color: #333;
+
+    .close {
+        display: none;
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        z-index: 1000;
+        cursor: pointer;
+        background-color: white;
+        border-radius: 2px;
+        border: none;
+        padding: 4px 8px;
+        font-size: large;
+        font-weight: bold;
+        color: #333;
+
+        &:hover {
+            outline: 1px solid #666666;
+        }
+    }
+}
+
+#map {
+    width: 100%;
+    height: 100%;
+}
+
+.sidebar {
+    width: 450px;
+}
+
+.locations {
+    max-height: 80vh;
+    /* This is very wip will have better solution */
+    overflow-x: scroll;
+
+}
+
+.location {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-bottom: 16px;
+    max-width: 450px;
+    background-color: #efefef;
+    border-radius: 24px;
+    padding: 24px 48px;
+
+    .form-item {
+        display: flex;
+        flex-direction: column;
+
+    }
+}
+
+.suggestions {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+}
+
+.error {
+    color: red;
+}
+
+.suggestion {
+    cursor: pointer;
+    padding: 8px 16px;
+    border-radius: 4px;
+    background-color: whitesmoke;
+}
+
+.suggestion:hover {
+    background-color: color-mix(in sRGB, whitesmoke, rgba(0, 0, 0, 0.5) 50%);
+}
+
+.file-count-warning {
+    display: none;
+    padding: 32px;
+    background-color: rgba(255, 0, 0, 0.264);
+}
+
+.custom-file-label{
+  display: block;
+  padding: 8px;
+  background-color: #f0f0f0;
+  cursor: pointer;
+  border-radius: 5px;
+  border: #333 1px solid;
+  width: fit-content;
+
+  &:hover {
+    background-color: #3333333d;
+  }
+
+}
+
+.photo {
+    position: relative;
+    /* Basic styling for the Polaroid effect */
+    width: 100px;
+    padding: 8px;
+    padding-bottom: 32px;
+    background-color: white;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    /* Soft shadow */
+    margin-right: 8px;
+    /* Add some space around each photo */
+    display: inline-block;
+    /* Allow multiple photos in a row */
+
+    /* More Polaroid-like features */
+    border: 1px solid #f3f3f3;
+    /* Optional: add a subtle border */
+    box-sizing: border-box;
+    /* Ensure padding does not increase the size */
+
+    &:hover .close {
+        display: inline-block;
+    }
+
+    .close {
+        cursor: pointer;
+        width: 24px; /* Set an explicit width */
+        height: 24px; /* Set an explicit height, equal to width for a circle */
+        line-height: 24px; /* Align the text/icon vertically. Adjust based on the actual height and font size */
+        text-align: center; /* Center the text/icon horizontally */
+        border-radius: 50%; /* This will make it a circle */
+        background-color: #3333337c;
+        color: white;
+        display: none;
+        position: absolute;
+        top: 4px;
+        right: 4px;
+    }
+}
+
+.photo img {
+    display: block;
+    /* Remove any extra space below the image */
+    width: 100%;
+    /* Make the image fill the container */
+    height: auto;
+    /* Maintain the aspect ratio */
+}
+
+input[type="file"] {
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    position: absolute;
+    left: -9999px; /* Hide input */
+}
