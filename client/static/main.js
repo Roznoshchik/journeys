@@ -1,5 +1,6 @@
 import './style.css';
-import {createLine, exitFullscreen, requestFullscreen, setMapSource, animateLine, map} from './map.js';
+import { createLine, exitFullscreen, requestFullscreen, setMapSource, animateLine, map } from './map.js';
+import { resizeImage, createPolaroid } from './media.js';
 
 const locations = document.querySelector('.locations');
 const add = document.querySelector('.add');
@@ -29,7 +30,7 @@ submit.onclick = async () => {
 
     // Add the line layer to the map
     map.addLayer(lineVectorLayer);
-    animateLine(lineString, lineFeature, allCoordinates)
+    animateLine(lineString, lineFeature, locationData)
 }
 
 mapClose.onclick = (event) => {
@@ -142,6 +143,8 @@ function handleAddressInput(address, suggestionsContainer) {
     }
 }
 
+
+
 function handleImagesInput(fileInput, imagesContainer, imageCountWarning) {
     const files = fileInput.files;
     // We only let 3 images in now, so check for how many we've uploaded
@@ -160,35 +163,11 @@ function handleImagesInput(fileInput, imagesContainer, imageCountWarning) {
         reader.onload = function (e) {
             const img = new Image();
             img.onload = function () {
-                // Determine the scale factor and cropping dimensions
-                const scale = 85 / Math.min(img.width, img.height);
-                const scaledWidth = img.width * scale;
-                const scaledHeight = img.height * scale;
-                const dx = (scaledWidth - 85) / 2;
-                const dy = (scaledHeight - 85) / 2;
 
-                // Create a canvas to resize and crop the image
-                const canvas = document.createElement('canvas');
-                const ctx = canvas.getContext('2d');
-                canvas.width = canvas.height = 85; // Target dimensions
+                const src = resizeImage(img, 85);
+                const photoContainer = createPolaroid(src);
 
-                // Draw the image onto the canvas with scaling and center cropping
-                ctx.drawImage(img, -dx, -dy, scaledWidth, scaledHeight);
-
-                // Convert canvas to an image for preview
-                const src = canvas.toDataURL('image/jpeg');
-
-                // Display the thumbnail
-                const thumbnail = new Image();
-                thumbnail.src = src;
-
-                // Assuming this part is inside your image onload function
-                const photoContainer = document.createElement('div');
-                photoContainer.className = 'photo';
                 photoContainer.setAttribute('file-name', file.name)
-
-                // Assuming 'thumbnail' is your image element
-                photoContainer.appendChild(thumbnail);
 
                 const closeIcon = document.createElement('span');
                 closeIcon.innerHTML = '&times;'; // Using HTML entity for simplicity
