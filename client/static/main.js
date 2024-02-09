@@ -8,6 +8,7 @@ const main = document.querySelector(".main");
 const mapClose = document.querySelector('.close');
 let addressTimeoutId = null;
 
+const photoFileMap = {};
 
 // Event listener for the map styles dropdown
 document.getElementById('mapSource').addEventListener('change', function () {
@@ -56,8 +57,12 @@ function getLocationFormData() {
         const departure = location.querySelector('input[name=departure]').value;
         const id = addressElem.id;
         const coordinates = addressElem.getAttribute('data-coordinates');
+        const imagesContainer = location.querySelector('.images-container');
+        const existingFiles = Array.from(imagesContainer.children).map(el => el.getAttribute('file-name'));
+        const images = existingFiles.map(file => photoFileMap[file]);
 
-        data.push({ id, address, arrival, departure, coordinates });
+
+        data.push({ id, address, arrival, departure, coordinates, images });
     }
     return data;
 }
@@ -139,6 +144,7 @@ function handleAddressInput(address, suggestionsContainer) {
 
 function handleImagesInput(fileInput, imagesContainer, imageCountWarning) {
     const files = fileInput.files;
+    // We only let 3 images in now, so check for how many we've uploaded
     if (imagesContainer.children.length + files.length > 3) {
         imageCountWarning.style.display = 'block';
         return;
@@ -146,6 +152,7 @@ function handleImagesInput(fileInput, imagesContainer, imageCountWarning) {
         imageCountWarning.style.display = 'none';
     }
 
+    // If less than 3, we will add the new images to the array.
     const existingFiles = Array.from(imagesContainer.children).map(el => el.getAttribute('file-name'));
     Array.from(files).forEach(file => {
         if (existingFiles.includes(file.name)) return;
@@ -193,6 +200,7 @@ function handleImagesInput(fileInput, imagesContainer, imageCountWarning) {
                 imagesContainer.appendChild(photoContainer);
             };
             img.src = e.target.result;
+            photoFileMap[file.name] = e.target.result;
         };
         reader.readAsDataURL(file);
     });
