@@ -144,7 +144,17 @@ function handleAddressInput(address, suggestionsContainer) {
 }
 
 
-
+/**
+ * Processes input files for image upload, limiting to 3, with warnings.
+ *
+ * Manages image file input, enforcing a maximum of 3 images. Displays a
+ * warning if the limit is exceeded. Newly selected images not already
+ * present are read and processed for display.
+ *
+ * @param {HTMLElement} fileInput - Input element for files.
+ * @param {HTMLElement} imagesContainer - Container for image thumbnails.
+ * @param {HTMLElement} imageCountWarning - Element to display limit warnings.
+ */
 function handleImagesInput(fileInput, imagesContainer, imageCountWarning) {
     const files = fileInput.files;
     // We only let 3 images in now, so check for how many we've uploaded
@@ -162,22 +172,7 @@ function handleImagesInput(fileInput, imagesContainer, imageCountWarning) {
         const reader = new FileReader();
         reader.onload = function (e) {
             const img = new Image();
-            img.onload = function () {
-
-                const src = resizeImage(img, 85);
-                const photoContainer = createPolaroid(src);
-
-                photoContainer.setAttribute('file-name', file.name)
-
-                const closeIcon = document.createElement('span');
-                closeIcon.innerHTML = '&times;'; // Using HTML entity for simplicity
-                closeIcon.className = 'close';
-                photoContainer.appendChild(closeIcon);
-
-                closeIcon.onclick = () => removeImage(file.name, imagesContainer) ;
-
-                imagesContainer.appendChild(photoContainer);
-            };
+            img.onload = () => handleThumbnailLoad(img, file.name, imagesContainer);
             img.src = e.target.result;
             photoFileMap[file.name] = e.target.result;
         };
@@ -185,6 +180,40 @@ function handleImagesInput(fileInput, imagesContainer, imageCountWarning) {
     });
 }
 
+/**
+ * Loads a thumbnail into the container with a removal option.
+ *
+ * Resizes an image, wraps it in a polaroid style, and appends a close icon
+ * for removal. Sets up an onclick handler for the icon to remove the image.
+ *
+ * @param {HTMLImageElement} img - Image to be processed.
+ * @param {string} fileName - Name of the file for identification.
+ * @param {HTMLElement} imagesContainer - Container for the thumbnails.
+ */
+function handleThumbnailLoad(img, fileName, imagesContainer) {
+    const src = resizeImage(img, 85);
+    const photoContainer = createPolaroid(src);
+
+    photoContainer.setAttribute('file-name', fileName)
+
+    const closeIcon = document.createElement('span');
+    closeIcon.innerHTML = '&times;'; // Using HTML entity for simplicity
+    closeIcon.className = 'close';
+    photoContainer.appendChild(closeIcon);
+
+    closeIcon.onclick = () => removeImage(fileName, imagesContainer);
+    imagesContainer.appendChild(photoContainer);
+}
+
+/**
+ * Removes an image element from the container by filename.
+ *
+ * Locates an image within the imagesContainer using the filename as a selector
+ * attribute and removes it if found.
+ *
+ * @param {string} filename - The name of the file to identify the image.
+ * @param {HTMLElement} imagesContainer - The container from which to remove.
+ */
 function removeImage(filename, imagesContainer) {
     let selector = `[file-name="${filename}"]`; // Construct the attribute selector
     let element = imagesContainer.querySelector(selector);

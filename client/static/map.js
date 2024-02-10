@@ -2,7 +2,7 @@ import { Map, View, Overlay } from 'ol';
 import Feature from 'ol/Feature.js';
 import Point from 'ol/geom/Point.js';
 import { LineString } from 'ol/geom';
-import { toLonLat, fromLonLat } from 'ol/proj';
+import { toLonLat } from 'ol/proj';
 import VectorSource from 'ol/source/Vector';
 import VectorLayer from 'ol/layer/Vector';
 import { Icon, Style } from 'ol/style.js';
@@ -63,6 +63,7 @@ function exitFullscreen() {
         document
             .exitFullscreen()
             .then(() => {
+                const mapClose = document.querySelector('.close');
                 mapClose.style.display = 'none';
             })
             .catch((err) => console.error(err));
@@ -253,7 +254,7 @@ async function animateLine(lineString, lineFeature, locationData) {
     // zoomLevel = getZoomLevel(startCoords, nextCoords); //preparing to zoom in on first point
     adjustZoomIfNecessary(startCoords, nextCoords)
     renderPoint(startCoords, true)
-    const images = await getCurrentImages(index);
+    const images = await getCurrentImages(index, locationData);
     // Calculate the delay between rendering each image so that all images are rendered within 5 seconds
     const totalDelay = 5000; // Total duration of 5 seconds
     let delayBetweenImages = totalDelay / images.length; // Divide total delay by the number of images to get delay between each
@@ -270,36 +271,8 @@ async function animateLine(lineString, lineFeature, locationData) {
     let coordsToRender = [startCoords];
     await sleep(totalDelay)
 
-    async function getCurrentImages(index) {
-        try {
-            const images = [];
-            const imgSources = locationData[index].images;
-            for (let src of imgSources) {
-                // Wrap the loading and processing in a promise to wait for it to complete
-                const resizedImageSrc = await new Promise((resolve, reject) => {
-                    const img = new Image();
-                    img.src = src;
-                    img.onload = () => {
-                        // Once loaded, resize the image and resolve the promise with the new source
-                        const resizedSrc = resizeImage(img, 85);
-                        resolve(resizedSrc);
-                    };
-                    img.onerror = reject;
-                });
-
-                // Use the resized image source to create a polaroid
-                const polaroid = createPolaroid(resizedImageSrc);
-                images.push(polaroid);
-            }
-            return images;
-
-        } catch {
-            return
-        }
-    }
-
     async function _animate(timestamp) {
-        const images = await getCurrentImages(index+1)
+        const images = await getCurrentImages(index+1, locationData)
 
         if (index >= totalSegments) {
             sharedVectorSource.removeFeature(temporaryPointFeature); // remove image at end of line
@@ -361,24 +334,86 @@ async function animateLine(lineString, lineFeature, locationData) {
     requestAnimationFrame(_animate);
 }
 
+/**
+ * Asynchronously loads, resizes images from locationData, creating polaroids.
+ *
+ * @param {number} index - Index in locationData for image URLs.
+ * @param {Array} locationData - Array of objects with 'images' property URLs.
+ * @returns {Promise<Array>} Promise resolving to an array of HTML elements for
+ * each resized polaroid image. Returns empty array if no images or on error.
+ *
+ * Attempts to load and resize each specified image, wrapping it in a polaroid
+ * HTML element. Continues with next image upon failure, logging errors.
+ */
+async function getCurrentImages(index, locationData) {
+    const images = [];
+    if (!locationData[index] || !locationData[index].images) return images;
+    const imgSources = locationData[index].images;
+
+    for (let src of imgSources) {
+        try {
+            const resizedImageSrc = await new Promise((resolve, reject) => {
+                const img = new Image();
+                img.src = src;
+                img.onload = () => {
+                    try {
+                        const resizedSrc = resizeImage(img, 85);
+                        resolve(resizedSrc);
+                    } catch (error) {
+                        reject(error);
+                    }
+                };
+                img.onerror = () => reject(new Error(`Failed to load image at ${src}`));
+            });
+
+            const polaroid = createPolaroid(resizedImageSrc);
+            images.push(polaroid);
+        } catch (error) {
+            console.error(`Error processing image ${src}:`, error);
+            continue;
+        }
+    }
+    return images;
+}
+
+/**
+ * Renders an element near a specified point with calculated pixel offset.
+ *
+ * @param {HTMLElement} image - The image or container element to be displayed.
+ * @param {Array} coords - Geographic coordinates ([longitude, latitude])
+ * @param {number} index - The index of the current point being rendered.
+ * @param {number} totalImages - Total number of images to display.
+ *
+ * This function calculates a pixel offset to position each image in a
+ * predefined pattern (west, south, east) relative to the central point.
+ * It creates an OpenLayers overlay for the image at the calculated position
+ * and adds it to the map. Adjusts 'offset' to spread images visually.
+ */
 function renderImageNearPoint(image, coords, index, totalImages) {
-    // Calculate a new position for each image to spread them around the point
     const offset = calculatePixelOffset(index, totalImages);
 
-
-
-    // Create an overlay with the polaroid container
     const overlay = new Overlay({
         element: image,
         position: coords,
         positioning: 'bottom-center',
-        offset: offset, // Adjust based on your needs
+        offset: offset,
     });
 
-    // Add the overlay to the map
     map.addOverlay(overlay);
 }
 
+/**
+ * Calculates pixel offset for positioning images west, south, or east.
+ *
+ * @param {number} index - Index of the current image
+ * This function returns a pixel offset to position an image either to the
+ * west, south, or east of a central point, based on the image's index.
+ * Offsets are calculated to ensure images are visually separated and
+ * appropriately aligned. Uses image dimensions and padding to calculate
+ * precise offset positions.
+ *
+ * @returns {Array<number>} Pixel offset as [x, y] for positioning.
+ */
 function calculatePixelOffset(index) {
     // Adjust offsets based on the image size and desired padding
     const padding = 40; // Padding in pixels
@@ -395,8 +430,6 @@ function calculatePixelOffset(index) {
     // Return the offset based on the index
     return offsets[index % 3]; // Use modulo to handle out-of-bounds index
 }
-
-
 
 /**
  * Sets the map's visual style based on a specified layer type.
