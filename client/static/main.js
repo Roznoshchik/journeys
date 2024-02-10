@@ -1,5 +1,6 @@
 import './style.css';
-import {createLine, exitFullscreen, requestFullscreen, setMapSource, animateLine, map} from './map.js';
+import { createLine, exitFullscreen, requestFullscreen, setMapSource, animateLine, map } from './map.js';
+import { resizeImage, createPolaroid } from './media.js';
 
 const locations = document.querySelector('.locations');
 const add = document.querySelector('.add');
@@ -8,6 +9,7 @@ const main = document.querySelector(".main");
 const mapClose = document.querySelector('.close');
 let addressTimeoutId = null;
 
+const photoFileMap = {};
 
 // Event listener for the map styles dropdown
 document.getElementById('mapSource').addEventListener('change', function () {
@@ -28,7 +30,7 @@ submit.onclick = async () => {
 
     // Add the line layer to the map
     map.addLayer(lineVectorLayer);
-    animateLine(lineString, lineFeature, allCoordinates)
+    animateLine(lineString, lineFeature, locationData)
 }
 
 mapClose.onclick = (event) => {
@@ -56,8 +58,12 @@ function getLocationFormData() {
         const departure = location.querySelector('input[name=departure]').value;
         const id = addressElem.id;
         const coordinates = addressElem.getAttribute('data-coordinates');
+        const imagesContainer = location.querySelector('.images-container');
+        const existingFiles = Array.from(imagesContainer.children).map(el => el.getAttribute('file-name'));
+        const images = existingFiles.map(file => photoFileMap[file]);
 
-        data.push({ id, address, arrival, departure, coordinates });
+
+        data.push({ id, address, arrival, departure, coordinates, images });
     }
     return data;
 }
@@ -137,8 +143,21 @@ function handleAddressInput(address, suggestionsContainer) {
     }
 }
 
+
+/**
+ * Processes input files for image upload, limiting to 3, with warnings.
+ *
+ * Manages image file input, enforcing a maximum of 3 images. Displays a
+ * warning if the limit is exceeded. Newly selected images not already
+ * present are read and processed for display.
+ *
+ * @param {HTMLElement} fileInput - Input element for files.
+ * @param {HTMLElement} imagesContainer - Container for image thumbnails.
+ * @param {HTMLElement} imageCountWarning - Element to display limit warnings.
+ */
 function handleImagesInput(fileInput, imagesContainer, imageCountWarning) {
     const files = fileInput.files;
+    // We only let 3 images in now, so check for how many we've uploaded
     if (imagesContainer.children.length + files.length > 3) {
         imageCountWarning.style.display = 'block';
         return;
@@ -146,58 +165,55 @@ function handleImagesInput(fileInput, imagesContainer, imageCountWarning) {
         imageCountWarning.style.display = 'none';
     }
 
+    // If less than 3, we will add the new images to the array.
     const existingFiles = Array.from(imagesContainer.children).map(el => el.getAttribute('file-name'));
     Array.from(files).forEach(file => {
         if (existingFiles.includes(file.name)) return;
         const reader = new FileReader();
         reader.onload = function (e) {
             const img = new Image();
-            img.onload = function () {
-                // Determine the scale factor and cropping dimensions
-                const scale = 85 / Math.min(img.width, img.height);
-                const scaledWidth = img.width * scale;
-                const scaledHeight = img.height * scale;
-                const dx = (scaledWidth - 85) / 2;
-                const dy = (scaledHeight - 85) / 2;
-
-                // Create a canvas to resize and crop the image
-                const canvas = document.createElement('canvas');
-                const ctx = canvas.getContext('2d');
-                canvas.width = canvas.height = 85; // Target dimensions
-
-                // Draw the image onto the canvas with scaling and center cropping
-                ctx.drawImage(img, -dx, -dy, scaledWidth, scaledHeight);
-
-                // Convert canvas to an image for preview
-                const src = canvas.toDataURL('image/jpeg');
-
-                // Display the thumbnail
-                const thumbnail = new Image();
-                thumbnail.src = src;
-
-                // Assuming this part is inside your image onload function
-                const photoContainer = document.createElement('div');
-                photoContainer.className = 'photo';
-                photoContainer.setAttribute('file-name', file.name)
-
-                // Assuming 'thumbnail' is your image element
-                photoContainer.appendChild(thumbnail);
-
-                const closeIcon = document.createElement('span');
-                closeIcon.innerHTML = '&times;'; // Using HTML entity for simplicity
-                closeIcon.className = 'close';
-                photoContainer.appendChild(closeIcon);
-
-                closeIcon.onclick = () => removeImage(file.name, imagesContainer) ;
-
-                imagesContainer.appendChild(photoContainer);
-            };
+            img.onload = () => handleThumbnailLoad(img, file.name, imagesContainer);
             img.src = e.target.result;
+            photoFileMap[file.name] = e.target.result;
         };
         reader.readAsDataURL(file);
     });
 }
 
+/**
+ * Loads a thumbnail into the container with a removal option.
+ *
+ * Resizes an image, wraps it in a polaroid style, and appends a close icon
+ * for removal. Sets up an onclick handler for the icon to remove the image.
+ *
+ * @param {HTMLImageElement} img - Image to be processed.
+ * @param {string} fileName - Name of the file for identification.
+ * @param {HTMLElement} imagesContainer - Container for the thumbnails.
+ */
+function handleThumbnailLoad(img, fileName, imagesContainer) {
+    const src = resizeImage(img, 85);
+    const photoContainer = createPolaroid(src);
+
+    photoContainer.setAttribute('file-name', fileName)
+
+    const closeIcon = document.createElement('span');
+    closeIcon.innerHTML = '&times;'; // Using HTML entity for simplicity
+    closeIcon.className = 'close';
+    photoContainer.appendChild(closeIcon);
+
+    closeIcon.onclick = () => removeImage(fileName, imagesContainer);
+    imagesContainer.appendChild(photoContainer);
+}
+
+/**
+ * Removes an image element from the container by filename.
+ *
+ * Locates an image within the imagesContainer using the filename as a selector
+ * attribute and removes it if found.
+ *
+ * @param {string} filename - The name of the file to identify the image.
+ * @param {HTMLElement} imagesContainer - The container from which to remove.
+ */
 function removeImage(filename, imagesContainer) {
     let selector = `[file-name="${filename}"]`; // Construct the attribute selector
     let element = imagesContainer.querySelector(selector);

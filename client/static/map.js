@@ -1,4 +1,4 @@
-import { Map, View } from 'ol';
+import { Map, View, Overlay } from 'ol';
 import Feature from 'ol/Feature.js';
 import Point from 'ol/geom/Point.js';
 import { LineString } from 'ol/geom';
@@ -12,6 +12,7 @@ import { createEmpty as createEmptyBoundingBox, extend as extendBoundingBox } fr
 import { getDistance } from 'ol/sphere';
 import { sleep } from './utilities';
 import gifler from 'gifler';
+import { createPolaroid, resizeImage } from './media';
 
 const audio = document.getElementById('bgMusic');
 const ANIMATION_DURATION = 10000;
@@ -44,11 +45,12 @@ const map = new Map({
 
 function requestFullscreen(elem) {
     try {
-        main.requestFullscreen();
+        console.log('going full screen?')
+        elem.requestFullscreen();
         return true
     } catch {
         try {
-            main.webkitRequestFullscreen();
+            elem.webkitRequestFullscreen();
             return true;
         } catch {
             return false
@@ -61,6 +63,7 @@ function exitFullscreen() {
         document
             .exitFullscreen()
             .then(() => {
+                const mapClose = document.querySelector('.close');
                 mapClose.style.display = 'none';
             })
             .catch((err) => console.error(err));
@@ -230,7 +233,7 @@ function createLine(coordinates) {
  * @param {Feature} lineFeature - The OpenLayers Feature object representing the line, updated during the animation.
  * @returns {void} This function does not return a value. It makes visual updates to the DOM.
  */
-async function animateLine(lineString, lineFeature) {
+async function animateLine(lineString, lineFeature, locationData) {
     let index = 0;
     const totalSegments = lineString.getCoordinates().length - 1;
     const segmentDuration = ANIMATION_DURATION;
@@ -248,15 +251,29 @@ async function animateLine(lineString, lineFeature) {
     sharedVectorSource.addFeature(temporaryPointFeature);
     map.addLayer(sharedVectorLayer);
 
-    zoomLevel = getZoomLevel(startCoords, nextCoords); //preparing to zoom in on first point
-
+    // zoomLevel = getZoomLevel(startCoords, nextCoords); //preparing to zoom in on first point
+    adjustZoomIfNecessary(startCoords, nextCoords)
     renderPoint(startCoords, true)
+    const images = await getCurrentImages(index, locationData);
+    // Calculate the delay between rendering each image so that all images are rendered within 5 seconds
+    const totalDelay = 5000; // Total duration of 5 seconds
+    let delayBetweenImages = totalDelay / images.length; // Divide total delay by the number of images to get delay between each
+
+    for (let i = 0; i < images.length; i++) {
+        setTimeout(() => {
+            // Render image on the map here
+            renderImageNearPoint(images[i], startCoords, i, images.length);
+        }, i * delayBetweenImages);
+    }
+
     setTimeout(() => audio.play(), 3000);
 
     let coordsToRender = [startCoords];
-    await sleep(3000)
+    await sleep(totalDelay)
 
     async function _animate(timestamp) {
+        const images = await getCurrentImages(index+1, locationData)
+
         if (index >= totalSegments) {
             sharedVectorSource.removeFeature(temporaryPointFeature); // remove image at end of line
             showAllPoints();
@@ -295,13 +312,123 @@ async function animateLine(lineString, lineFeature) {
             segmentStart = null;
             index++; // this sets the index to the end coordinates
             const nextCoords = index + 1 <= totalSegments ? lineString.getCoordinates()[index + 1] : null;
-            await sleep(3000);
+
+            // Calculate the delay between rendering each image so that all images are rendered within 5 seconds
+            const totalDelay = 5000; // Total duration of 5 seconds
+            let delayBetweenImages = totalDelay / images.length; // Divide total delay by the number of images to get delay between each
+
+            for (let i = 0; i < images.length; i++) {
+                setTimeout(() => {
+                    // Render image on the map here
+                    renderImageNearPoint(images[i], segmentEndCoords, i, images.length);
+                }, i * delayBetweenImages);
+            }
+
+
+            await sleep(totalDelay);
             await adjustZoomIfNecessary(segmentEndCoords, nextCoords);
             requestAnimationFrame(_animate);
         }
     }
 
     requestAnimationFrame(_animate);
+}
+
+/**
+ * Asynchronously loads, resizes images from locationData, creating polaroids.
+ *
+ * @param {number} index - Index in locationData for image URLs.
+ * @param {Array} locationData - Array of objects with 'images' property URLs.
+ * @returns {Promise<Array>} Promise resolving to an array of HTML elements for
+ * each resized polaroid image. Returns empty array if no images or on error.
+ *
+ * Attempts to load and resize each specified image, wrapping it in a polaroid
+ * HTML element. Continues with next image upon failure, logging errors.
+ */
+async function getCurrentImages(index, locationData) {
+    const images = [];
+    if (!locationData[index] || !locationData[index].images) return images;
+    const imgSources = locationData[index].images;
+
+    for (let src of imgSources) {
+        try {
+            const resizedImageSrc = await new Promise((resolve, reject) => {
+                const img = new Image();
+                img.src = src;
+                img.onload = () => {
+                    try {
+                        const resizedSrc = resizeImage(img, 85);
+                        resolve(resizedSrc);
+                    } catch (error) {
+                        reject(error);
+                    }
+                };
+                img.onerror = () => reject(new Error(`Failed to load image at ${src}`));
+            });
+
+            const polaroid = createPolaroid(resizedImageSrc);
+            images.push(polaroid);
+        } catch (error) {
+            console.error(`Error processing image ${src}:`, error);
+            continue;
+        }
+    }
+    return images;
+}
+
+/**
+ * Renders an element near a specified point with calculated pixel offset.
+ *
+ * @param {HTMLElement} image - The image or container element to be displayed.
+ * @param {Array} coords - Geographic coordinates ([longitude, latitude])
+ * @param {number} index - The index of the current point being rendered.
+ * @param {number} totalImages - Total number of images to display.
+ *
+ * This function calculates a pixel offset to position each image in a
+ * predefined pattern (west, south, east) relative to the central point.
+ * It creates an OpenLayers overlay for the image at the calculated position
+ * and adds it to the map. Adjusts 'offset' to spread images visually.
+ */
+function renderImageNearPoint(image, coords, index, totalImages) {
+    const offset = calculatePixelOffset(index, totalImages);
+
+    const overlay = new Overlay({
+        element: image,
+        position: coords,
+        positioning: 'bottom-center',
+        offset: offset,
+    });
+
+    map.addOverlay(overlay);
+}
+
+/**
+ * Calculates pixel offset for positioning images west, south, or east.
+ *
+ * @param {number} index - Index of the current image
+ * This function returns a pixel offset to position an image either to the
+ * west, south, or east of a central point, based on the image's index.
+ * Offsets are calculated to ensure images are visually separated and
+ * appropriately aligned. Uses image dimensions and padding to calculate
+ * precise offset positions.
+ *
+ * @returns {Array<number>} Pixel offset as [x, y] for positioning.
+ */
+function calculatePixelOffset(index) {
+    // Adjust offsets based on the image size and desired padding
+    const padding = 40; // Padding in pixels
+    const imageWidth = 100;
+    const imageHeight = 124;
+
+    // Define pixel offsets for west (left), south (bottom), and east (right) positions
+    const offsets = [
+        [-(imageWidth + padding), -imageHeight / 2], // West: Move left by width + padding, vertically centered
+        [-(imageWidth / 2), padding], // South: Centered horizontally, move down by padding
+        [padding, -imageHeight / 2], // East: Move right by padding, vertically centered
+    ];
+
+    // Return the offset based on the index
+    return offsets[index % 3]; // Use modulo to handle out-of-bounds index
 }
 
 /**
@@ -373,10 +500,6 @@ function getZoomLevel(startCoords, nextCoords) {
     const start = toLonLat(startCoords);
     const next = toLonLat(nextCoords);
     const distance = getDistance(start, next);
-
-    // Define your logic for determining the zoom level based on distance
-    const closeZoomLevel = 10; // closer zoom for short distances
-    const defaultZoom = 5;  // farther zoom for long distances
 
     // Define thresholds and corresponding zoom levels
     const thresholds = [
