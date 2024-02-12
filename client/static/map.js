@@ -12,12 +12,15 @@ import { createEmpty as createEmptyBoundingBox, extend as extendBoundingBox } fr
 import { getDistance } from 'ol/sphere';
 import { sleep } from './utilities';
 import gifler from 'gifler';
-import { createPolaroid, resizeImage } from './media';
+import { createPolaroidImg } from './media';
 
 const audio = document.getElementById('bgMusic');
 const ANIMATION_DURATION = 10000;
 let boundingBox = createEmptyBoundingBox(); // used at the end to zoom out to show all locations.
 let zoomLevel = 2;
+
+// Global variable to signal the end of the animation
+let animationInProgress = false;
 
 
 const view = new View({
@@ -71,26 +74,51 @@ function exitFullscreen() {
 }
 
 /**
- * Creates a vector layer containing a point feature.
+ * Creates a vector layer with a single point feature. Useful for adding
+ * custom points to a map, optionally styled with a custom icon. The point
+ * is created at the specified coordinates and can be styled with an icon
+ * image and displacement.
  *
- * @param {Object} coords - The coordinates for the new point
- * @returns {VectorLayer} A vector layer containing the point feature.
+ * @param {Object} coords - Coordinates for the new point, containing
+ *                          latitude and longitude (or x and y) properties.
+ * @param {string|null} imgSrc - Optional. URL for the icon image. If null,
+ *                               a default icon is used.
+ * @param {Array<number>|null} displacement - Optional. Displacement of the
+ *                                            icon from its anchor position,
+ *                                            specified as [dx, dy]. No
+ *                                            displacement if null.
+ * @returns {VectorLayer} A vector layer with the point feature. Configured
+ *                        with a z-index of 100 to render above other layers.
  */
-function _createPoint(coords) {
+
+function _createPoint(coords, imgSrc = null, displacement = null) {
     const point = new Point(coords);
 
     const feature = new Feature({
         geometry: point
     });
-    const iconStyle = new Style({
-        image: new Icon({
-            anchor: [0.5, 0.5],
-            scale: ".5",
-            anchorXUnits: 'fraction',
-            anchorYUnits: 'fraction',
-            src: 'static/media/images/rr.png',
-        }),
-    });
+    let iconStyle;
+    if (imgSrc) {
+        iconStyle = new Style({
+            image: new Icon({
+                anchor: [0.5, 0.5],
+                displacement: displacement,
+                scale: 1,
+                src: imgSrc,
+            }),
+        });
+    }
+    else {
+        iconStyle = new Style({
+            image: new Icon({
+                anchor:[0.5, 0.5],
+                scale: ".5",
+                anchorXUnits: 'fraction',
+                anchorYUnits: 'fraction',
+                src: 'static/media/images/rr.png',
+            }),
+        });
+    }
     feature.setStyle(iconStyle)
 
     // Create a source and layer for the point feature and add it to the map
@@ -247,6 +275,9 @@ async function animateLine(lineString, lineFeature, locationData) {
     const sharedVectorLayer = new VectorLayer({
         source: sharedVectorSource
     });
+    animationInProgress = true;
+    captureMapAnimation('canvas', 25, 'mapAnimation.webm');
+
     sharedVectorLayer.setZIndex(1000);
     sharedVectorSource.addFeature(temporaryPointFeature);
     map.addLayer(sharedVectorLayer);
@@ -280,6 +311,7 @@ async function animateLine(lineString, lineFeature, locationData) {
             await sleep(5000)
             audio.pause();
             audio.fastSeek(0);
+            animationInProgress = false;
             return;  // Animation complete
         }
 
@@ -352,24 +384,13 @@ async function getCurrentImages(index, locationData) {
 
     for (let src of imgSources) {
         try {
-            const resizedImageSrc = await new Promise((resolve, reject) => {
-                const img = new Image();
-                img.src = src;
-                img.onload = () => {
-                    try {
-                        const resizedSrc = resizeImage(img, 85);
-                        resolve(resizedSrc);
-                    } catch (error) {
-                        reject(error);
-                    }
-                };
-                img.onerror = () => reject(new Error(`Failed to load image at ${src}`));
-            });
+            // Use createPolaroidImg to process the image and apply the Polaroid effect
+            const polaroidDataUrl = await createPolaroidImg(src, 85);
+            images.push(polaroidDataUrl);
 
-            const polaroid = createPolaroid(resizedImageSrc);
-            images.push(polaroid);
         } catch (error) {
             console.error(`Error processing image ${src}:`, error);
+            // Optionally, handle the error, e.g., by continuing to the next image
             continue;
         }
     }
@@ -390,16 +411,12 @@ async function getCurrentImages(index, locationData) {
  * and adds it to the map. Adjusts 'offset' to spread images visually.
  */
 function renderImageNearPoint(image, coords, index, totalImages) {
-    const offset = calculatePixelOffset(index, totalImages);
+    const displacement = calculatePixelOffset(index, totalImages);
+    const imagePoint = _createPoint(coords, image, displacement);
+    map.addLayer(imagePoint);
 
-    const overlay = new Overlay({
-        element: image,
-        position: coords,
-        positioning: 'bottom-center',
-        offset: offset,
-    });
-
-    map.addOverlay(overlay);
+    const pointBoundary = imagePoint.getSource().getExtent();
+    extendBoundingBox(boundingBox, pointBoundary);
 }
 
 /**
@@ -544,6 +561,63 @@ async function adjustZoomIfNecessary(startCoords, endCoords) {
         await sleep(3000);
     }
 }
+
+/**
+ * Captures a canvas-based map animation and saves it as a video file. This function
+ * utilizes the MediaRecorder API to record the animation at a specified frame rate.
+ * The video is saved as a WebM file. It periodically checks if the animation is still
+ * in progress and stops recording once the animation completes. The resulting video
+ * file is then prompted for download using a temporary link.
+ *
+ * @param {string} canvasSelector - A CSS selector string used to identify the canvas
+ *                                  element from which the animation is captured.
+ * @param {number} fps - The frame rate at which the video should be recorded. This
+ *                       determines how many frames per second the video will have,
+ *                       affecting the smoothness of the playback.
+ * @param {string} fileName - The desired name for the downloaded video file, including
+ *                            its .webm extension.
+ *
+ * Note: This function assumes the presence of a global variable `animationInProgress`
+ * that should be set to `false` to indicate the animation has completed. It's important
+ * to manage this variable's state based on the specific animation logic being used.
+ */
+function captureMapAnimation(canvasSelector, fps, fileName) {
+    const canvas = document.querySelector(canvasSelector);
+    if (!canvas) {
+        console.error('Canvas element not found!');
+        return;
+    }
+
+    const stream = canvas.captureStream(fps);
+    const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+    const chunks = [];
+
+    recorder.ondataavailable = e => chunks.push(e.data);
+    recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: 'video/webm' });
+        const url = URL.createObjectURL(blob);
+
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    };
+
+    recorder.start();
+
+    // Check every 500ms if the animation has completed
+    const checkInterval = setInterval(() => {
+        if (!animationInProgress) {
+            recorder.stop();
+            clearInterval(checkInterval);
+        }
+    }, 500);
+}
+
 
 export {
     map,
