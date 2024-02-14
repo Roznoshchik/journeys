@@ -22,8 +22,8 @@ def get_address_suggestions():
     if not address:
         abort(HTTPStatus.BAD_REQUEST, description="No address supplied")
 
-    suggestions = get_n_random_suggestions(n=2)
-    # suggestions = get_geocoded_suggestions(address)
+    # suggestions = get_n_random_suggestions(n=2)
+    suggestions = get_geocoded_suggestions(address)
 
     return jsonify(suggestions), HTTPStatus.OK
 

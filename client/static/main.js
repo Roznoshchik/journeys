@@ -1,5 +1,5 @@
 import './style.css';
-import { createLine, exitFullscreen, requestFullscreen, setMapSource, animateLine, map } from './map.js';
+import { createLine, exitFullscreen, requestFullscreen, setMapSource, animateLine, map, mapToImage } from './map.js';
 import { resizeImage, createPolaroid } from './media.js';
 
 const locations = document.querySelector('.locations');
@@ -8,6 +8,7 @@ const submit = document.querySelector('.submit');
 const main = document.querySelector(".main");
 const mapClose = document.querySelector('.close');
 let addressTimeoutId = null;
+const downloadImg = document.querySelector('.download-image');
 
 const photoFileMap = {};
 
@@ -39,6 +40,8 @@ mapClose.onclick = (event) => {
 
 add.onclick = addLocationInput;
 addLocationInput()  // we aren't rendering this to start, so initialize with first input.
+
+downloadImg.onclick = mapToImage;
 
 
 /**

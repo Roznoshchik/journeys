@@ -618,6 +618,41 @@ function captureMapAnimation(canvasSelector, fps, fileName) {
     }, 500);
 }
 
+function mapToImage() {
+    map.once('rendercomplete', function () {
+        const printDPI = 300;
+        const widthInches = 24;
+        const heightInches = 18;
+        const canvasWidth = printDPI * widthInches;
+        const canvasHeight = printDPI * heightInches;
+
+        const mapCanvas = document.createElement('canvas');
+        mapCanvas.width = canvasWidth;
+        mapCanvas.height = canvasHeight;
+        const mapContext = mapCanvas.getContext('2d');
+
+        // Determine the scale factors for width and height
+        const originalCanvas = map.getViewport().querySelector('canvas');
+        const scaleX = canvasWidth / originalCanvas.width;
+        const scaleY = canvasHeight / originalCanvas.height;
+        const scaleToFit = Math.min(scaleX, scaleY); // Ensures entire map fits within the canvas without distortion
+
+        mapContext.scale(scaleToFit, scaleToFit);
+
+        mapContext.drawImage(originalCanvas, 0, 0, originalCanvas.width, originalCanvas.height);
+
+        // Reset the transform to ensure the image is not skewed in future operations
+        mapContext.setTransform(1, 0, 0, 1, 0, 0);
+
+        // Export the image
+        const link = document.createElement('a');
+        link.href = mapCanvas.toDataURL('image/png');
+        link.download = 'map-poster.png';
+        link.click();
+    });
+    map.renderSync();
+}
+
 
 export {
     map,
@@ -633,4 +668,5 @@ export {
     showAllPoints,
     getZoomLevel,
     adjustZoomIfNecessary,
+    mapToImage
 }
