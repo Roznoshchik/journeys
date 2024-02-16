@@ -1,5 +1,5 @@
 import './style.css';
-import { createLine, exitFullscreen, requestFullscreen, setMapSource, animateLine, map, mapToImage } from './map.js';
+import { createLine, exitFullscreen, requestFullscreen, setMapSource, animateLine, getView, getMap, mapToImage } from './map.js';
 import { resizeImage, createPolaroid } from './media.js';
 
 const locations = document.querySelector('.locations');
@@ -11,6 +11,9 @@ let addressTimeoutId = null;
 const downloadImg = document.querySelector('.download-image');
 
 const photoFileMap = {};
+
+const view = getView();
+const map = getMap({ view });
 
 // Event listener for the map styles dropdown
 document.getElementById('mapSource').addEventListener('change', function () {
@@ -31,7 +34,7 @@ submit.onclick = async () => {
 
     // Add the line layer to the map
     map.addLayer(lineVectorLayer);
-    animateLine(lineString, lineFeature, locationData)
+    animateLine(map, lineString, lineFeature, locationData)
 }
 
 mapClose.onclick = (event) => {
@@ -41,7 +44,7 @@ mapClose.onclick = (event) => {
 add.onclick = addLocationInput;
 addLocationInput()  // we aren't rendering this to start, so initialize with first input.
 
-downloadImg.onclick = mapToImage;
+downloadImg.onclick = () => mapToImage(map);
 
 
 /**

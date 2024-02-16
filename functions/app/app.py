@@ -15,6 +15,11 @@ def base():
     return render_template("index.html")
 
 
+@app.route("/map")
+def map():
+    return render_template("map.html")
+
+
 @app.post("/get-address-suggestions")
 def get_address_suggestions():
     data = request.json

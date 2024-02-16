@@ -1,4 +1,4 @@
-import { Map, View, Overlay } from 'ol';
+import { Map, View } from 'ol';
 import Feature from 'ol/Feature.js';
 import Point from 'ol/geom/Point.js';
 import { LineString } from 'ol/geom';
@@ -23,27 +23,36 @@ let zoomLevel = 2;
 let animationInProgress = false;
 
 
-const view = new View({
-    center: [0, 0],
-    zoom: zoomLevel
-})
 
-const map = new Map({
-    target: 'map',
-    layers: [
-        new TileLayer({
-            preload: Infinity,
-            source: new StadiaMaps({
-                // See our gallery for more styles: https://docs.stadiamaps.com/themes/
-                layer: 'osm_bright',
-                retina: true,  // Set to false for stamen_watercolor
+function getView({ center, zoom } = { center: [0, 0], zoom: 2 }) {
+    const view = new View({
+        center,
+        zoom
+    })
+    return view;
+}
+
+function getMap({ view, target = 'map', options = {} }) {
+    const map = new Map({
+        target: target,
+        layers: [
+            new TileLayer({
+                preload: Infinity,
+                source: new StadiaMaps({
+                    // See our gallery for more styles: https://docs.stadiamaps.com/themes/
+                    layer: 'osm_bright',
+                    retina: true,  // Set to false for stamen_watercolor
+                })
             })
-        })
-    ],
-    view: view,
-    loadTilesWhileAnimating: true,
-    loadTilesWhileInteracting: false,
-});
+        ],
+        view: view,
+        loadTilesWhileAnimating: true,
+        loadTilesWhileInteracting: false,
+        ...options
+    });
+
+    return map
+}
 
 
 function requestFullscreen(elem) {
@@ -142,9 +151,10 @@ function _createPoint(coords, imgSrc = null, displacement = null) {
  * @param {boolean} [shouldAnimate=false] - determines whether the map view should animate to center on the new point.
  * @returns {void} This function does not return a value. It performs operations that result in visual changes on the map.
  */
-function renderPoint(coords, shouldAnimate = false) {
+function renderPoint(map, coords, shouldAnimate = false) {
     let point = _createPoint(coords);
     map.addLayer(point);
+    const view = map.getView();
 
     const pointBoundary = point.getSource().getExtent();
     extendBoundingBox(boundingBox, pointBoundary);
@@ -166,7 +176,7 @@ function renderPoint(coords, shouldAnimate = false) {
  * @param {Array<number>} coords - The coordinates where the point feature will be created.
  * @returns {ol.Feature} The created point feature with the animated GIF icon.
  */
-function createTemporaryPoint(coords) {
+function createTemporaryPoint(map, coords) {
     const point = new Point(coords);
     const feature = new Feature({
         geometry: point
@@ -261,7 +271,7 @@ function createLine(coordinates) {
  * @param {Feature} lineFeature - The OpenLayers Feature object representing the line, updated during the animation.
  * @returns {void} This function does not return a value. It makes visual updates to the DOM.
  */
-async function animateLine(lineString, lineFeature, locationData) {
+async function animateLine(map, lineString, lineFeature, locationData) {
     let index = 0;
     const totalSegments = lineString.getCoordinates().length - 1;
     const segmentDuration = ANIMATION_DURATION;
@@ -270,7 +280,7 @@ async function animateLine(lineString, lineFeature, locationData) {
     let nextCoords = lineString.getCoordinates()[1];
 
     // Create a temporary point that will appear at the end of the line as it animates.
-    let temporaryPointFeature = createTemporaryPoint(startCoords);
+    let temporaryPointFeature = createTemporaryPoint(map, startCoords);
     const sharedVectorSource = new VectorSource();
     const sharedVectorLayer = new VectorLayer({
         source: sharedVectorSource
@@ -283,8 +293,8 @@ async function animateLine(lineString, lineFeature, locationData) {
     map.addLayer(sharedVectorLayer);
 
     // zoomLevel = getZoomLevel(startCoords, nextCoords); //preparing to zoom in on first point
-    adjustZoomIfNecessary(startCoords, nextCoords)
-    renderPoint(startCoords, true)
+    adjustZoomIfNecessary(map, startCoords, nextCoords)
+    renderPoint(map, startCoords, true)
     const images = await getCurrentImages(index, locationData);
     // Calculate the delay between rendering each image so that all images are rendered within 5 seconds
     const totalDelay = 5000; // Total duration of 5 seconds
@@ -293,7 +303,7 @@ async function animateLine(lineString, lineFeature, locationData) {
     for (let i = 0; i < images.length; i++) {
         setTimeout(() => {
             // Render image on the map here
-            renderImageNearPoint(images[i], startCoords, i, images.length);
+            renderImageNearPoint(map, images[i], startCoords, i, images.length);
         }, i * delayBetweenImages);
     }
 
@@ -307,7 +317,7 @@ async function animateLine(lineString, lineFeature, locationData) {
 
         if (index >= totalSegments) {
             sharedVectorSource.removeFeature(temporaryPointFeature); // remove image at end of line
-            showAllPoints();
+            showAllPoints(map);
             await sleep(5000)
             audio.pause();
             audio.fastSeek(0);
@@ -332,14 +342,14 @@ async function animateLine(lineString, lineFeature, locationData) {
             // Include all previous segments plus the current interpolated coordinate
             const currentLineString = new LineString([...coordsToRender, interpolatedCoord]);
             lineFeature.setGeometry(currentLineString);
-            view.animate({
+            map.getView().animate({
                 center: interpolatedCoord,
                 duration: 0,
             })
             requestAnimationFrame(_animate);
         } else {
             // Segment completed, prepare for the next segment
-            renderPoint(segmentEndCoords);
+            renderPoint(map, segmentEndCoords);
             coordsToRender.push(segmentEndCoords);
             segmentStart = null;
             index++; // this sets the index to the end coordinates
@@ -352,13 +362,13 @@ async function animateLine(lineString, lineFeature, locationData) {
             for (let i = 0; i < images.length; i++) {
                 setTimeout(() => {
                     // Render image on the map here
-                    renderImageNearPoint(images[i], segmentEndCoords, i, images.length);
+                    renderImageNearPoint(map, images[i], segmentEndCoords, i, images.length);
                 }, i * delayBetweenImages);
             }
 
 
             await sleep(totalDelay);
-            await adjustZoomIfNecessary(segmentEndCoords, nextCoords);
+            await adjustZoomIfNecessary(map, segmentEndCoords, nextCoords);
             requestAnimationFrame(_animate);
         }
     }
@@ -410,7 +420,7 @@ async function getCurrentImages(index, locationData) {
  * It creates an OpenLayers overlay for the image at the calculated position
  * and adds it to the map. Adjusts 'offset' to spread images visually.
  */
-function renderImageNearPoint(image, coords, index, totalImages) {
+function renderImageNearPoint(map, image, coords, index, totalImages) {
     const displacement = calculatePixelOffset(index, totalImages);
     const imagePoint = _createPoint(coords, image, displacement);
     map.addLayer(imagePoint);
@@ -497,7 +507,7 @@ function setMapSource(layer, map) {
  *
  * @returns {void} This function does not return a value. It performs operations that result in visual changes on the map.
  */
-async function showAllPoints() {
+async function showAllPoints(map) {
     map.getView().fit(boundingBox, { padding: [50, 50, 50, 50], duration: 3500 });
     await sleep(6000)
     exitFullscreen()
@@ -553,11 +563,11 @@ function getZoomLevel(startCoords, nextCoords) {
  * @param {number[]} endCoords - The ending coordinates,
  * @returns {Promise<void>} A promise that resolves when the zoom adjustment and animation are complete.
  */
-async function adjustZoomIfNecessary(startCoords, endCoords) {
+async function adjustZoomIfNecessary(map, startCoords, endCoords) {
     const newZoomLevel = getZoomLevel(startCoords, endCoords);
     if (newZoomLevel != zoomLevel) {
         zoomLevel = newZoomLevel;
-        view.animate({ zoom: zoomLevel, duration: 3000 });
+        map.getView().animate({ zoom: zoomLevel, duration: 3000 });
         await sleep(3000);
     }
 }
@@ -618,7 +628,7 @@ function captureMapAnimation(canvasSelector, fps, fileName) {
     }, 500);
 }
 
-function mapToImage() {
+function mapToImage(map) {
     map.once('rendercomplete', function () {
         const printDPI = 300;
         const widthInches = 24;
@@ -655,8 +665,6 @@ function mapToImage() {
 
 
 export {
-    map,
-    view,
     requestFullscreen,
     exitFullscreen,
     createLine,
@@ -668,5 +676,7 @@ export {
     showAllPoints,
     getZoomLevel,
     adjustZoomIfNecessary,
-    mapToImage
+    mapToImage,
+    getMap,
+    getView
 }
