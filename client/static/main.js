@@ -1,77 +1,89 @@
-import './style.css';
-import { createLine, exitFullscreen, requestFullscreen, setMapSource, animateLine, getView, getMap, mapToImage } from './map.js';
-import { resizeImage, createPolaroid } from './media.js';
+import "./style.css";
+import {
+  exitFullscreen,
+  requestFullscreen,
+  getView,
+  getMap,
+  startAnimation,
+} from "./map.js";
+import { resizeImage, createPolaroid } from "./media.js";
 
-const locations = document.querySelector('.locations');
-const add = document.querySelector('.add');
-const submit = document.querySelector('.submit');
+const locationsContainer = document.querySelector(".locations");
+const add = document.querySelector(".add");
+const submit = document.querySelector(".submit");
 const main = document.querySelector(".main");
-const mapClose = document.querySelector('.close');
+const mapClose = document.querySelector(".close");
+const mapTileSrc = document.getElementById("mapSource");
 let addressTimeoutId = null;
-const downloadImg = document.querySelector('.download-image');
 
 const photoFileMap = {};
 
 const view = getView();
 const map = getMap({ view });
 
-// Event listener for the map styles dropdown
-document.getElementById('mapSource').addEventListener('change', function () {
-    setMapSource(this.value, map);
-});
-
 submit.onclick = async () => {
-    const locationData = getLocationFormData();
-    let allCoordinates = []
+  const mapFormData = getMapFormData();
+  const url = "/bg";
+  const res = fetch(url, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(mapFormData),
+  });
 
-    locationData.forEach(location => {
-        allCoordinates.push(JSON.parse(location.coordinates));
-    })
-    let inFullScreen = requestFullscreen(main);
+  let inFullScreen = requestFullscreen(main);
+  inFullScreen ? (mapClose.style.display = "block") : main.scrollIntoView();
+  startAnimation(map, mapFormData, false);
 
-    inFullScreen ? (mapClose.style.display = 'block') : main.scrollIntoView();
-    const { lineFeature, lineString, lineVectorLayer } = createLine(allCoordinates);
-
-    // Add the line layer to the map
-    map.addLayer(lineVectorLayer);
-    animateLine(map, lineString, lineFeature, locationData)
-}
+  let response = await res;
+  if (response.ok) {
+    console.log("Success!");
+  } else {
+    console.log("Not a success!");
+  }
+};
 
 mapClose.onclick = (event) => {
-    exitFullscreen()
+  exitFullscreen();
 };
 
 add.onclick = addLocationInput;
-addLocationInput()  // we aren't rendering this to start, so initialize with first input.
-
-downloadImg.onclick = () => mapToImage(map);
-
+addLocationInput(); // we aren't rendering this to start, so initialize with first input.
 
 /**
- * Extracts id, address, coordinates, arrival, and departure form data from all elements with the
- * '.location' class. These objects are then aggregated into an array.
+ * Collects location-related data from elements marked with the '.location' class and organizes this
+ * information into a structured object. This object contains an array of location objects and a
+ * global map tile source URL. Each location object includes the location's ID, address, arrival and
+ * departure times, geographical coordinates, and associated images. The map tile source URL is
+ * included as a separate property, applicable to the map as a whole.
  *
- * @returns {Array} An array of objects, where each object contains the 'id', 'address', 'arrival',
- *                  'departure', and coordinates values from one '.location' element.
- *                  The array includes one object for each '.location' element found.
+ * @returns {Object} An object containing two properties:
+ * - `locations`: An array of objects, each representing a location.
+ * - `tileSrc`: A string representing the source URL for the map tile, applicable to the entire map.
  */
-function getLocationFormData() {
-    const data = [];
-    for (let location of locations.querySelectorAll('.location')) {
-        const addressElem = location.querySelector('input[name=address]');
-        const address = addressElem.value;
-        const arrival = location.querySelector('input[name=arrival]').value;
-        const departure = location.querySelector('input[name=departure]').value;
-        const id = addressElem.id;
-        const coordinates = addressElem.getAttribute('data-coordinates');
-        const imagesContainer = location.querySelector('.images-container');
-        const existingFiles = Array.from(imagesContainer.children).map(el => el.getAttribute('file-name'));
-        const images = existingFiles.map(file => photoFileMap[file]);
+function getMapFormData() {
+  const locations = [];
+  for (let location of locationsContainer.querySelectorAll(".location")) {
+    const addressElem = location.querySelector("input[name=address]");
+    const address = addressElem.value;
+    const arrival = location.querySelector("input[name=arrival]").value;
+    const departure = location.querySelector("input[name=departure]").value;
+    const id = addressElem.id;
+    const coordinates = addressElem.getAttribute("data-coordinates");
+    const imagesContainer = location.querySelector(".images-container");
+    const existingFiles = Array.from(imagesContainer.children).map((el) =>
+      el.getAttribute("file-name")
+    );
+    const images = existingFiles.map((file) => photoFileMap[file]);
+    locations.push({ id, address, arrival, departure, coordinates, images });
+  }
+  const formData = {
+    locations,
+    tileSrc: mapTileSrc.value,
+  };
 
-
-        data.push({ id, address, arrival, departure, coordinates, images });
-    }
-    return data;
+  return formData;
 }
 
 /**
@@ -86,12 +98,12 @@ function getLocationFormData() {
  * @returns {void} This function does not return a value. It modifes the DOM
  */
 function addLocationInput() {
-    const allLocations = document.querySelectorAll('.location');
-    const locationsCount = allLocations.length + 1;
+  const allLocations = document.querySelectorAll(".location");
+  const locationsCount = allLocations.length + 1;
 
-    const location = document.createElement('div');
-    location.classList.add('location');
-    location.innerHTML = `<div class="form-item">
+  const location = document.createElement("div");
+  location.classList.add("location");
+  location.innerHTML = `<div class="form-item">
         <label for="address-${locationsCount}">Address</label>
         <input type="search" autocomplete="off" id="address-${locationsCount}" name="address">
         <div class="suggestions"></div>
@@ -111,44 +123,17 @@ function addLocationInput() {
         <div class="images-container"></div>
     </div>
     `;
-    const address = location.querySelector(`#address-${locationsCount}`);
-    const suggestionsContainer = location.querySelector('.suggestions');
-    const images = location.querySelector(`#images-${locationsCount}`)
-    const imagesContainer = location.querySelector('.images-container');
-    const imageCountWarning = location.querySelector('.file-count-warning')
-    address.oninput = () => handleAddressInput(address, suggestionsContainer);
-    images.onchange = () => handleImagesInput(images, imagesContainer, imageCountWarning);
+  const address = location.querySelector(`#address-${locationsCount}`);
+  const suggestionsContainer = location.querySelector(".suggestions");
+  const images = location.querySelector(`#images-${locationsCount}`);
+  const imagesContainer = location.querySelector(".images-container");
+  const imageCountWarning = location.querySelector(".file-count-warning");
+  address.oninput = () => handleAddressInput(address, suggestionsContainer);
+  images.onchange = () =>
+    handleImagesInput(images, imagesContainer, imageCountWarning);
 
-    locations.append(location);
+  locationsContainer.append(location);
 }
-
-/**
- * Handles input event for an address field by debouncing the input event.
- * It waits for a specific time after the user has stopped typing and then triggers
- * fetching of address suggestions.
- *
- * This function prevents the immediate invocation of suggestion fetching with each
- * keystroke, reducing the number of unnecessary calls to the getAddressSuggestions
- * function and ultimately the external API.
- *
- * @param {HTMLInputElement} address - The input element for the address.
- * @param {HTMLElement} suggestionsContainer - Where the address suggestions will be rendered.
- *
- * Global Variables:
- * - addressTimeoutId: A global variable used to keep track of the timeout,
- *   allowing it to be cleared if the function is called again before the
- *   timeout period has completed.
- *
- * @returns {void} This function does not return a value. It sets a timeout to
- *                 asynchronously fetch address suggestions.
- */
-function handleAddressInput(address, suggestionsContainer) {
-    if (address.value.trim()) {
-        clearTimeout(addressTimeoutId);
-        addressTimeoutId = setTimeout(() => getAddressSuggestions(address, suggestionsContainer), 1000)
-    }
-}
-
 
 /**
  * Processes input files for image upload, limiting to 3, with warnings.
@@ -162,28 +147,30 @@ function handleAddressInput(address, suggestionsContainer) {
  * @param {HTMLElement} imageCountWarning - Element to display limit warnings.
  */
 function handleImagesInput(fileInput, imagesContainer, imageCountWarning) {
-    const files = fileInput.files;
-    // We only let 3 images in now, so check for how many we've uploaded
-    if (imagesContainer.children.length + files.length > 3) {
-        imageCountWarning.style.display = 'block';
-        return;
-    } else {
-        imageCountWarning.style.display = 'none';
-    }
+  const files = fileInput.files;
+  // We only let 3 images in now, so check for how many we've uploaded
+  if (imagesContainer.children.length + files.length > 3) {
+    imageCountWarning.style.display = "block";
+    return;
+  } else {
+    imageCountWarning.style.display = "none";
+  }
 
-    // If less than 3, we will add the new images to the array.
-    const existingFiles = Array.from(imagesContainer.children).map(el => el.getAttribute('file-name'));
-    Array.from(files).forEach(file => {
-        if (existingFiles.includes(file.name)) return;
-        const reader = new FileReader();
-        reader.onload = function (e) {
-            const img = new Image();
-            img.onload = () => handleThumbnailLoad(img, file.name, imagesContainer);
-            img.src = e.target.result;
-            photoFileMap[file.name] = e.target.result;
-        };
-        reader.readAsDataURL(file);
-    });
+  // If less than 3, we will add the new images to the array.
+  const existingFiles = Array.from(imagesContainer.children).map((el) =>
+    el.getAttribute("file-name")
+  );
+  Array.from(files).forEach((file) => {
+    if (existingFiles.includes(file.name)) return;
+    const reader = new FileReader();
+    reader.onload = function (e) {
+      const img = new Image();
+      img.onload = () => handleThumbnailLoad(img, file.name, imagesContainer);
+      img.src = e.target.result;
+      photoFileMap[file.name] = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
 /**
@@ -197,18 +184,18 @@ function handleImagesInput(fileInput, imagesContainer, imageCountWarning) {
  * @param {HTMLElement} imagesContainer - Container for the thumbnails.
  */
 function handleThumbnailLoad(img, fileName, imagesContainer) {
-    const src = resizeImage(img, 85);
-    const photoContainer = createPolaroid(src);
+  const src = resizeImage(img, 85);
+  const photoContainer = createPolaroid(src);
 
-    photoContainer.setAttribute('file-name', fileName)
+  photoContainer.setAttribute("file-name", fileName);
 
-    const closeIcon = document.createElement('span');
-    closeIcon.innerHTML = '&times;'; // Using HTML entity for simplicity
-    closeIcon.className = 'close';
-    photoContainer.appendChild(closeIcon);
+  const closeIcon = document.createElement("span");
+  closeIcon.innerHTML = "&times;"; // Using HTML entity for simplicity
+  closeIcon.className = "close";
+  photoContainer.appendChild(closeIcon);
 
-    closeIcon.onclick = () => removeImage(fileName, imagesContainer);
-    imagesContainer.appendChild(photoContainer);
+  closeIcon.onclick = () => removeImage(fileName, imagesContainer);
+  imagesContainer.appendChild(photoContainer);
 }
 
 /**
@@ -221,13 +208,35 @@ function handleThumbnailLoad(img, fileName, imagesContainer) {
  * @param {HTMLElement} imagesContainer - The container from which to remove.
  */
 function removeImage(filename, imagesContainer) {
-    let selector = `[file-name="${filename}"]`; // Construct the attribute selector
-    let element = imagesContainer.querySelector(selector);
-    if (element) {
-        element.remove(); // Remove the element if it's found
-    }
+  let selector = `[file-name="${filename}"]`; // Construct the attribute selector
+  let element = imagesContainer.querySelector(selector);
+  if (element) {
+    element.remove(); // Remove the element if it's found
+  }
 }
 
+/**
+ * Handles input event for an address field by debouncing the input event.
+ * It waits for a specific time after the user has stopped typing and then triggers
+ * fetching of address suggestions.
+ *
+ * @param {HTMLInputElement} address - The input element for the address.
+ * @param {HTMLElement} suggestionsContainer - Where the address suggestions will be rendered.
+ *
+ * Global Variables:
+ * - addressTimeoutId: A global variable used to keep track of the timeout,
+ *
+ * @returns {void}
+ */
+function handleAddressInput(address, suggestionsContainer) {
+  if (address.value.trim()) {
+    clearTimeout(addressTimeoutId);
+    addressTimeoutId = setTimeout(
+      () => getAddressSuggestions(address, suggestionsContainer),
+      1000
+    );
+  }
+}
 
 /**
  * Fetches address suggestions asynchronously and renders them
@@ -237,40 +246,33 @@ function removeImage(filename, imagesContainer) {
  * @param {HTMLElement} suggestionsContainer - The container where the
  * suggestions will be rendered.
  *
- * Assumptions:
- * - The current window location's URL can be used as a base for the
- * target URL.
- * - A function named 'renderSuggestions' is defined elsewhere and is
- * responsible for rendering the suggestions data into the
- * suggestionsContainer.
- *
  * @returns {void} This function does not return a value. It performs
  * asynchronous operations and calls the renderSuggestions method.
  */
 async function getAddressSuggestions(address, suggestionsContainer) {
-    const url = new URL(window.location.href);
-    url.pathname += url.pathname.endsWith('/') ? 'get-address-suggestions' : '/get-address-suggestions';
-    const res = await fetch(url.toString(), {
-        method: 'POST',
-        headers: {
-            'content-type': 'application/json'
-        },
-        body: JSON.stringify({ address: address.value })
-    })
-    if (res.ok) {
-        const data = await res.json()
-        renderSuggestions(data, address, suggestionsContainer)
-    } else {
-        try {
-            const error = await res.json()
-            console.log(error)
-        } catch {
-            console.log(res.text())
-
-        }
+  const url = new URL(window.location.href);
+  url.pathname += url.pathname.endsWith("/")
+    ? "get-address-suggestions"
+    : "/get-address-suggestions";
+  const res = await fetch(url.toString(), {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ address: address.value }),
+  });
+  if (res.ok) {
+    const data = await res.json();
+    renderSuggestions(data, address, suggestionsContainer);
+  } else {
+    try {
+      const error = await res.json();
+      console.log(error);
+    } catch {
+      console.log(res.text());
     }
+  }
 }
-
 
 /**
  * Renders a list of geocoded location suggestions below the search bar.
@@ -302,25 +304,29 @@ async function getAddressSuggestions(address, suggestionsContainer) {
  * directly, updating the suggestionsContainer with the provided suggestions.
  */
 function renderSuggestions(suggestions, address, suggestionsContainer) {
-    if (!suggestions.length) {
-        const error = document.createElement('span');
-        error.classList.add('error');
-        error.textContent = "Sorry, this location isn't known to us, try a city or a country."
-        suggestionsContainer.replaceChildren(error);
-        return;
-    }
+  if (!suggestions.length) {
+    const error = document.createElement("span");
+    error.classList.add("error");
+    error.textContent =
+      "Sorry, this location isn't known to us, try a city or a country.";
+    suggestionsContainer.replaceChildren(error);
+    return;
+  }
 
-    const options = [];
-    for (let suggestion of suggestions) {
-        const option = document.createElement('div');
-        option.classList.add('suggestion');
-        option.textContent = suggestion.place_name;
-        option.onclick = () => {
-            address.value = suggestion.place_name;
-            address.setAttribute('data-coordinates', JSON.stringify(suggestion.center))
-            suggestionsContainer.replaceChildren();
-        };
-        options.push(option);
-    }
-    suggestionsContainer.replaceChildren(...options);
+  const options = [];
+  for (let suggestion of suggestions) {
+    const option = document.createElement("div");
+    option.classList.add("suggestion");
+    option.textContent = suggestion.place_name;
+    option.onclick = () => {
+      address.value = suggestion.place_name;
+      address.setAttribute(
+        "data-coordinates",
+        JSON.stringify(suggestion.center)
+      );
+      suggestionsContainer.replaceChildren();
+    };
+    options.push(option);
+  }
+  suggestionsContainer.replaceChildren(...options);
 }

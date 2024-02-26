@@ -1,26 +1,42 @@
 <!DOCTYPE html>
 <html lang="en">
-
-<head>
+  <head>
     <style>
-        @import "./node_modules/ol/ol.css";
-        html,
-        body,
-        .map {
-            height: 100%;
-            width: 100%;
-            display: block;
-        }
-    </style>
-</head>
+      @import "./node_modules/ol/ol.css";
+      html,
+      body,
+      .map {
+        height: 100%;
+        width: 100%;
+        display: block;
+      }
 
-<body>
+    </style>
+  </head>
+
+  <body>
     <div class="map" id="map"></div>
     <script type="module">
-        import { getMap, getView } from './static/map.js';
-        const view = getView()
-        const map = getMap({ view })
-    </script>
-</body>
+      import { getMap, getView, mapToImage, startAnimation } from "./static/map.js";
+      const view = getView();
+      const map = getMap({ view });
 
+      window.getAnimation = (mapFormData) => {
+        try {
+          startAnimation(map, mapFormData);
+        } catch (e) {
+          console.error(e)
+        }
+      }
+
+      window.prepForScreenshot = (mapFormData) => {
+        try {
+          mapToImage(map, mapFormData);
+        } catch (e) {
+          console.error(e)
+        }
+      }
+
+    </script>
+  </body>
 </html>
