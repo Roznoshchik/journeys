@@ -70,13 +70,17 @@ def bg():
         context = browser.new_context(accept_downloads=True)
         page = context.new_page()
         page.on("console", lambda msg: print(msg.text))
-        page.on("download", handle_dowload)
+        with page.expect_download(
+            timeout=len(map_form_data["locations"]) * 15000 + 10000
+        ) as download_info:
+            page.goto(url_for("map", _external=True))
+            page.evaluate(
+                "(mapFormData) => window.getAnimation(mapFormData);", map_form_data
+            )
+            download_info.value.save_as(download_info.value.suggested_filename)
+            download_info.value.delete()
 
-        page.goto(url_for("map", _external=True))
-        page.evaluate(
-            "(mapFormData) => window.getAnimation(mapFormData);", map_form_data
-        )
-        page.wait_for_timeout(len(map_form_data["locations"]) * 15000)
+        print("All done")
         browser.close()
 
     return "", HTTPStatus.OK

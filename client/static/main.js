@@ -34,7 +34,7 @@ submit.onclick = async () => {
 
   let inFullScreen = requestFullscreen(main);
   inFullScreen ? (mapClose.style.display = "block") : main.scrollIntoView();
-  startAnimation(map, mapFormData, false);
+  startAnimation(map, mapFormData, { shouldPlayAudio: true });
 
   let response = await res;
   if (response.ok) {

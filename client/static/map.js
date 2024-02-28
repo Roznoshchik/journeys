@@ -17,11 +17,12 @@ import { sleep } from "./utilities";
 import gifler from "gifler";
 import { createPolaroidImg } from "./media";
 
-// const audio = document.getElementById("bgMusic");
+const audio = document.getElementById("bgMusic");
 const ANIMATION_DURATION = 10000;
 let boundingBox = createEmptyBoundingBox(); // used at the end to zoom out to show all locations.
 let zoomLevel = 2;
-const shouldRecord = true;
+let shouldRecord = false;
+let shouldPlayAudio = false;
 
 // Global variable to signal the end of the animation
 let animationInProgress = false;
@@ -102,12 +103,12 @@ async function mapToImage(map, mapFormData) {
     renderPoint(map, fromLonLat(coord));
   }
 
-  showAllPoints(map);
+  showAllPoints(map, [300, 300, 300, 300]);
 }
 
 /**
  * Updates the map animating the plotting of all of the points.
- * A video recording captures the animation as it happens.
+ * Optionally records the animation and/or plays audio.
  *
  * @param {Object} map - The map instance where points will be rendered.
  * @param {Object} mapFormData - Contains the map tile source URL and location data:
@@ -119,10 +120,18 @@ async function mapToImage(map, mapFormData) {
  *     - `departure`: Departure time from the location.
  *     - `coordinates`: String of geographical coordinates ([longitude, latitude]) in JSON format.
  *     - `images`: Array of associated image files for the location.
- *  @param {Boolean} shouldRecord - Controls whether a recording should be made. Defaults to true;
+ *  @param {Object} [options={ shouldRecord: false, shouldPlayAudio: false }]
+ *                   - `shouldRecord`: Record animation (default: false).
+ *                   - `shouldPlayAudio`: Play audio during animation (default: false).
  */
-function startAnimation(map, mapFormData, shouldRecord = true) {
-  shouldRecord = shouldRecord;
+function startAnimation(
+  map,
+  mapFormData,
+  options = { shouldRecord: false, shouldPlayAudio: false }
+) {
+  shouldRecord = options.shouldRecord ? true : false;
+  shouldPlayAudio = options.shouldPlayAudio ? true: false;
+
   let allCoordinates = [];
   setMapSource(mapFormData.tileSrc, map);
   mapFormData.locations.forEach((location) => {
@@ -367,7 +376,6 @@ async function animateLine(map, lineString, lineFeature, mapFormData) {
     source: sharedVectorSource,
   });
   animationInProgress = true;
-  console.log({shouldRecord})
   shouldRecord && captureMapAnimation("canvas", 25, "mapAnimation.webm");
 
   sharedVectorLayer.setZIndex(1000);
@@ -389,7 +397,7 @@ async function animateLine(map, lineString, lineFeature, mapFormData) {
     }, i * delayBetweenImages);
   }
 
-  // setTimeout(() => audio.play(), 3000);
+  shouldPlayAudio && setTimeout(() => audio.play(), 3000);
 
   let coordsToRender = [startCoords];
   await sleep(totalDelay);
@@ -401,8 +409,10 @@ async function animateLine(map, lineString, lineFeature, mapFormData) {
       sharedVectorSource.removeFeature(temporaryPointFeature); // remove image at end of line
       showAllPoints(map);
       await sleep(5000);
-      // audio.pause();
-      // audio.fastSeek(0);
+      if (shouldPlayAudio) {
+        audio.pause();
+        audio.fastSeek(0);
+      }
       animationInProgress = false;
       return; // Animation complete
     }
@@ -483,8 +493,9 @@ async function animateLine(map, lineString, lineFeature, mapFormData) {
  */
 async function getCurrentImages(index, mapFormData) {
   const images = [];
-  if (!mapFormData[index] || !mapFormData[index].images) return images;
-  const imgSources = mapFormData[index].images;
+  if (!mapFormData.locations[index] || !mapFormData.locations[index].images)
+    return images;
+  const imgSources = mapFormData.locations[index].images;
 
   for (let src of imgSources) {
     try {
@@ -595,12 +606,22 @@ function setMapSource(layer, map) {
 }
 
 /**
- * Adjusts the map view to fit all rendered points within the current bounding box.
+ * Adjusts the map's view to ensure all points are visible within the current
+ * bounding box. Optionally animates this adjustment.
  *
- * @returns {void} This function does not return a value. It performs operations that result in visual changes on the map.
+ * @param {Object} map - The map instance to operate on.
+ * @param {Array} [padding=[50, 50, 50, 50]] - Padding around the points in pixels
+ *                [top, right, bottom, left].
+ * @param {number} [duration=3500] - Duration of the animation in milliseconds.
+ * @returns {void} - This function does not return a value. It updates the map's
+ *                   view to include all points.
  */
-async function showAllPoints(map) {
-  map.getView().fit(boundingBox, { padding: [300, 300, 600, 300], duration: 3500 });
+async function showAllPoints(
+  map,
+  padding = [150, 150, 150, 150],
+  duration = 3500
+) {
+  map.getView().fit(boundingBox, { padding, duration });
   await sleep(6000);
   exitFullscreen();
 }

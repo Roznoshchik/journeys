@@ -23,7 +23,7 @@
 
       window.getAnimation = (mapFormData) => {
         try {
-          startAnimation(map, mapFormData);
+          startAnimation(map, mapFormData, {shouldRecord: true});
         } catch (e) {
           console.error(e)
         }
