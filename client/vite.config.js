@@ -9,6 +9,10 @@ export default defineConfig({
     outDir: '../functions/app/static/', // set the output directory for static assets
     emptyOutDir: true, // clear the directory before building
     rollupOptions: {
+      input: {
+        index: './index.html', // Your existing entry
+        map: './map.html' // Path to your map.html
+      },
       output: {
         // Set constant file names without hash suffixes - I think eventually we want to remove this to allow
         // for proper caching.
@@ -46,40 +50,57 @@ export default defineConfig({
     // This allows us to write the code here and ensure that all the proper files are
     // copied over to the proper location so that Flask can recognize them.
     {
-      name: 'handle-index-html',
+      name: 'handle-html-files',
       writeBundle() {
-        // Define the source of the actual index.html you are working on
-        const source = path.resolve(__dirname, './index.html');
+        const files = ['index.html', 'map.html'];
         const templatesDestinationDir = path.resolve(__dirname, '../functions/app/templates');
-        const templatesDestination = path.join(templatesDestinationDir, 'index.html');
-        const staticIndexHtml = path.resolve(__dirname, '../functions/app/static/index.html');
+        const staticDestinationDir = path.resolve(__dirname, '../functions/app/static');
 
-        // Copy the original index.html file to the new location
-        fs.copyFile(source, templatesDestination, function (err) {
-          if (err) {
-            fs.mkdirSync(templatesDestinationDir)
-            fs.copyFile(source, templatesDestination, function (err) {
-              if (err) {
-                return console.log(err);
-              }
-            })
-            console.error('Error copying original index.html:', err);
-          } else {
-            console.log(`Original index.html copied to ${templatesDestination}`);
-          }
-        });
+        for (let file of files) {
+          const source = path.join(staticDestinationDir, file);
+          const destination = path.join(templatesDestinationDir, file);
 
-        // Delete the index.html in static directory if it exists
-        if (fs.existsSync(staticIndexHtml)) {
-          fs.unlink(staticIndexHtml, function (err) {
+          // First, read the source file
+          fs.readFile(source, 'utf8', function (err, data) {
             if (err) {
-              console.error('Error deleting static index.html:', err);
-            } else {
-              console.log(`Deleted ${staticIndexHtml}`);
+              console.error('Error reading source file:', err);
+              return;
             }
+
+            // Replace "/main" with "/static/main"
+            let modifiedData = data.replace(/"\/main/g, '"/static/main');
+            modifiedData = modifiedData.replace(/"\/style/g, '"/static/style');
+
+            // Write the modified content to the destination
+            fs.writeFile(destination, modifiedData, function (err) {
+              if (err) {
+                console.error('Error writing modified file:', err);
+                // If the directory does not exist, create it and try again
+                fs.mkdirSync(templatesDestinationDir, { recursive: true });
+                fs.writeFile(destination, modifiedData, function (err) {
+                  if (err) {
+                    return console.log(err);
+                  }
+                });
+              } else {
+                console.log(`Modified ${file} copied to ${destination}`);
+              }
+
+              // After successfully writing, delete the source file
+              if (fs.existsSync(source)) {
+                fs.unlink(source, function (err) {
+                  if (err) {
+                    console.error('Error deleting static file:', err);
+                  } else {
+                    console.log(`Deleted ${source}`);
+                  }
+                });
+              }
+            });
           });
         }
       }
     }
+
   ]
 });
