@@ -109,5 +109,17 @@ def bad_request(e):
     return jsonify(error=str(e)), HTTPStatus.BAD_REQUEST
 
 
+@app.get("/printify/<resource>")
+def printify(resource):
+    from .utils.pod import Printify
+
+    if resource == "shops":
+        return Printify.get_shops()
+    elif resource == "blueprints":
+        return Printify.get_blueprints()
+    else:
+        abort(HTTPStatus.BAD_REQUEST)
+
+
 if __name__ == "__main__":
     app.run()
